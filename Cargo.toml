@@ -1,0 +1,11 @@
+[package]
+name = "credit_faas_demo"
+version = "0.1.0"
+authors = ["Daniel Stahl <danstahl1138@gmail.com>"]
+
+[dependencies]
+fang_oost = "0.7.0"
+num-complex = "0.2"
+rayon = "1.0.1"
+cf_functions = "0.6.2"
+ws = "*"
