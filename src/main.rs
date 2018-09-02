@@ -46,7 +46,7 @@ fn log_lpm_cf(
     move |u:&Complex<f64>, loans:&[f64]|{
         (0..m).map(|index|{ //what is m??
             loans.iter().fold(0.0, |accum, loan|{
-                (lgd_cf(u, loan)-1.0)*get_pd(loan)*get_w(loan, index)
+                (lgd_cf(u, get_l(loan))-1.0)*get_pd(loan)*get_w(loan, index)
             })
         })
     } //should this return a vector or an iterator
@@ -72,28 +72,16 @@ fn get_lgd_cf_fn(
 }
 
 fn main() {
-    if let Err(error) = connect("ws://127.0.0.1:3012", |out| {
-
-        // Queue a message to be sent when the WebSocket is open
-        if let Err(_) = out.send("init") {
-            println!("Websocket couldn't queue an initial message.")
-        } else {
-            println!("Client sent message 'Hello WebSocket'. ")
-        }
-
-        // The handler needs to take ownership of out, so we use move
-        move |msg| {
-
-            // Handle messages received on this connection
-            println!("Client got message '{}'. ", msg);
-
-            // Close the connection
-            out.close(CloseCode::Normal)
-        }
-
-    }) {
-        // Inform the user of failure
-        println!("Failed to create WebSocket due to: {:?}", error);
-    }
-    //println!("Hello, world!");
+    let lambda=0.5;
+    let q=0.5;
+    let theta=0.5;
+    let sigma=0.3;
+    let t=1.0;
+    let x0=1.2;
+    let liquid_fn=get_liquidity_risk_fn(lambda, q);
+    let lgd_fn=get_lgd_cf_fn(lambda, theta, sigma, t, x0);
+    let x_min=0.0;
+    let x_max=2.0;
+    let log_loan_cf_fn=log_lpm_cf(m, &lgd_fn, 
+    get_full_cf_fn(x_min, x_max, get_liquidity, log_lpm_cf)
 }
