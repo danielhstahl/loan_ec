@@ -46,47 +46,49 @@ fn get_full_exponent<T, U>(
     x_min:f64,
     x_max:f64,
     num_u:usize,
+    num_systemic:usize,
     get_liquidity:T, 
     log_lpm_cf:U 
-)->impl Fn( &[Loan])->Vec<Vec<Complex<f64> > > 
+)->impl Fn( &[Loan])->Vec<Complex<f64> > 
 where 
     T:Fn(&Complex<f64>)->Complex<f64>+std::marker::Sync+std::marker::Send,
-    U: Fn(&Complex<f64>, &[Loan])->Complex<f64>+std::marker::Sync+std::marker::Send
+    U: Fn(&Complex<f64>, &[Loan], usize)->Complex<f64>+std::marker::Sync+std::marker::Send
 {
     let du=fang_oost::compute_du(x_min, x_max);
     move |loans:&[Loan]|{
-        (0..num_u)
-            .into_par_iter()
-            .map(|index|{
-                log_lpm_cf(
-                    &get_liquidity(
-                        &fang_oost::get_complex_u(fang_oost::get_u(du, index))
-                    ),
-                    loans
-                )
-            }).collect()//array of size num_u by num_systemic_factors
+        (0..num_u).into_par_iter()
+            .flat_map(|u_index|{
+                (0..num_systemic).map(|systemic_index|{
+                    log_lpm_cf(
+                        &get_liquidity(
+                            &fang_oost::get_complex_u(fang_oost::get_u(du, u_index))
+                        ),
+                        loans,
+                        systemic_index
+                    )
+                }).collect::<Vec<_>>()
+            }).collect()//size is num_systemic*num_u
     }
 }
 
 fn log_lpm_cf<T, U, V, W>(
-    num_systemic_factors:usize,
     lgd_cf:T,
     get_l:U,
     get_pd:V,
-    get_w:W 
-)->impl Fn(&Complex<f64>, &[Loan])->Vec<Complex<f64> >
+    get_w:W
+)->impl Fn(&Complex<f64>, &[Loan], usize)-> Complex<f64>//Iterator<Item = Complex<f64> >+std::marker::Sync+std::marker::Sized+std::marker::Send
 where
     T:Fn(&Complex<f64>, f64)->Complex<f64> +std::marker::Sync+std::marker::Send,
     U:Fn(&Loan)->f64 +std::marker::Sync+std::marker::Send,
     V:Fn(&Loan)->f64 +std::marker::Sync+std::marker::Send,
     W: Fn(&Loan, usize)->f64+std::marker::Sync+std::marker::Send
 { 
-    move |u:&Complex<f64>, loans:&[Loan]|{
-        (0..num_systemic_factors).map(|index|{
-            loans.iter().fold(Complex::new(0.0, 0.0), |accum, loan|{
-                (lgd_cf(u, get_l(loan))-1.0)*get_pd(loan)*get_w(loan, index)
-            })
-        }).collect()//array of size num_systemic_factors
+    move |u:&Complex<f64>, loans:&[Loan], index:usize|{
+        //(0..num_systemic_factors).map(move |index|{
+        loans.iter().fold(Complex::new(0.0, 0.0), |accum, loan|{
+            accum+(lgd_cf(u, get_l(loan))-1.0)*get_pd(loan)*get_w(loan, index)
+        })
+        //})//.collect()//array of size num_systemic_factors
     }
 }
 fn get_lgd_cf_fn(
@@ -96,7 +98,7 @@ fn get_lgd_cf_fn(
     t:f64,
     x0:f64
 )->impl Fn(&Complex<f64>, f64)->Complex<f64>{
-    |u:&Complex<f64>, l:f64|{
+    move |u:&Complex<f64>, l:f64|{
         cf_functions::cir_mgf(
             &(u*l), speed, long_run_average*speed, 
             sigma, t, x0
@@ -126,13 +128,14 @@ fn main()-> Result<(), io::Error> {
     let lgd_fn=get_lgd_cf_fn(alpha_l, b_l, sig_l, t, b_l);//assumption is that it starts at the lgd mean...
     
     let log_loan_cf_fn=log_lpm_cf(
-        num_systemic_factors, &lgd_fn, 
-        &|&loan|loan.balance*loan.lgd,
-        &|&loan|loan.pd,
-        &|&loan, index|loan.weight[index]
+        &lgd_fn, 
+        |loan:&Loan|loan.balance*loan.lgd,
+        |loan:&Loan|loan.pd,
+        |loan:&Loan, index|loan.weight[index]
     );
-    let full_exponent=get_full_exponent(x_min, x_max, u_steps, &liquid_fn, &log_loan_cf_fn);
+    let full_exponent=get_full_exponent(x_min, x_max, u_steps, num_systemic_factors, &liquid_fn, &log_loan_cf_fn);
     let complex_exponent=full_exponent(&loans); //and we have a num_u by num_systemic factor vector of vectors
     println!("num u {}:", complex_exponent.len());
-    println!("num systemic factor {}:", complex_exponent.first().unwrap().len());
+    //println!("num systemic factor {}:", complex_exponent.first().unwrap().len());
+    Ok(())
 }
