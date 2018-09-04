@@ -2,24 +2,23 @@ extern crate fang_oost;
 extern crate num_complex;
 extern crate rayon;
 extern crate cf_functions;
+extern crate rand;
+
+use rand::prelude::*;
 use self::num_complex::Complex;
 use self::rayon::prelude::*;
-
-extern crate serde_json;
-#[macro_use]
-extern crate serde_derive;
 
 use std::env;
 use std::io;
 
-#[derive(Serialize, Deserialize)]
+
 struct Loan {
     balance:f64,
     weight:Vec<f64>,
     pd:f64,
     lgd:f64
 }
-#[derive(Serialize, Deserialize)]
+
 struct Parameters {
     lambda:f64,
     q:f64,
@@ -105,12 +104,75 @@ fn get_lgd_cf_fn(
         )
     }   
 }
-
+fn get_rough_total_exposure(
+    min_loan_size:f64,
+    max_loan_size:f64,
+    num_loans:usize
+)->f64{
+    (num_loans as f64)*(min_loan_size+0.5*(max_loan_size-min_loan_size))
+}
+fn get_parameters(
+    batch_size:usize,
+    num_batches:usize,
+    num_weights:usize,
+    min_loan_size:f64,
+    max_loan_size:f64,
+    max_possible_loss:f64
+)->Parameters{
+    let exposure=get_rough_total_exposure(
+        min_loan_size,
+        max_loan_size,
+        num_batches*batch_size
+    );
+    Parameters{
+        lambda:0.2*exposure,
+        q:0.1/exposure,
+        alpha_l:0.2,
+        b_l:0.5,
+        sig_l:0.2,
+        t:1.0,
+        u_steps:256,
+        num_send:batch_size,
+        x_min:-max_possible_loss*exposure,
+        x_max:0.0
+    }
+}
+fn generate_unif(min:f64, max:f64)->f64{
+    min+random::<f64>()*(max-min)
+}
+fn generate_balance(min_loan_size:f64, max_loan_size:f64)->f64{
+    generate_unif(min_loan_size, max_loan_size)
+}
+fn generate_pd()->f64{
+    generate_unif(0.01, 0.05)
+}
+fn generate_weights(num_macro:usize)->Vec<f64>{
+    let rand_weight:Vec<f64>=(0..num_macro).map(|_|random::<f64>()).collect();
+    let total=rand_weight.iter().sum();
+    rand_weight.into_iter().map(|v|v/total).collect()
+}
+fn get_loans(
+    batch_size:usize, num_macro:usize, 
+    min_loan_size:f64, max_loan_size:f64
+)->Vec<Loan>{
+    (0..batch_size).map(|index|{
+        Loan{
+            balance:generate_balance(min_loan_size, max_loan_size),
+            lgd:0.5,
+            pd:generate_pd(),
+            weight:generate_weights(num_macro)
+        }
+    }).collect()
+}
 fn main()-> Result<(), io::Error> {
     let args: Vec<String> = env::args().collect();
-    let parameters:Parameters=serde_json::from_str(&args[1])?;
-    let loans:Vec<Loan>=serde_json::from_str(&args[2])?;
-    let num_systemic_factors=loans.first().unwrap().weight.len();
+    let batch_size:usize=1000;
+    let num_batches:usize=1000;
+    let num_weights:usize=3;
+    let min_loan_size=10000.0;
+    let max_loan_size=50000.0;
+    let max_possible_loss=0.14;//more than this an HUGE loss
+    let num_macro=3;
     let Parameters{
         lambda,
         q,
@@ -119,11 +181,13 @@ fn main()-> Result<(), io::Error> {
         sig_l,
         t,
         u_steps,
-        num_send,
+        num_send:_num_send,
         x_min,
         x_max
-    }=parameters;
-
+    }=get_parameters(
+        batch_size, num_batches, num_weights, 
+        min_loan_size, max_loan_size, max_possible_loss
+    );
     let liquid_fn=get_liquidity_risk_fn(lambda, q);
     let lgd_fn=get_lgd_cf_fn(alpha_l, b_l, sig_l, t, b_l);//assumption is that it starts at the lgd mean...
     
@@ -133,9 +197,16 @@ fn main()-> Result<(), io::Error> {
         |loan:&Loan|loan.pd,
         |loan:&Loan, index|loan.weight[index]
     );
-    let full_exponent=get_full_exponent(x_min, x_max, u_steps, num_systemic_factors, &liquid_fn, &log_loan_cf_fn);
-    let complex_exponent=full_exponent(&loans); //and we have a num_u by num_systemic factor vector of vectors
-    println!("num u {}:", complex_exponent.len());
+
+    (0..num_batches).into_par_iter().map(|index|{
+        let loans=get_loans(batch_size, num_macro, min_loan_size, max_loan_size);
+        let full_exponent=get_full_exponent(x_min, x_max, u_steps, num_macro, &liquid_fn, &log_loan_cf_fn);
+        let complex_exponent=full_exponent(&loans); //and we have a num_u by num_systemic factor vector of vectors
+        //println!("num u {}:", complex_exponent.len());
+    });
+
+
+    
     //println!("num systemic factor {}:", complex_exponent.first().unwrap().len());
     Ok(())
 }
