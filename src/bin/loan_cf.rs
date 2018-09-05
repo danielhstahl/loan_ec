@@ -148,7 +148,7 @@ fn generate_pd()->f64{
 }
 fn generate_weights(num_macro:usize)->Vec<f64>{
     let rand_weight:Vec<f64>=(0..num_macro).map(|_|random::<f64>()).collect();
-    let total=rand_weight.iter().sum();
+    let total:f64=rand_weight.iter().sum();
     rand_weight.into_iter().map(|v|v/total).collect()
 }
 fn get_loans(
@@ -198,11 +198,16 @@ fn main()-> Result<(), io::Error> {
         |loan:&Loan, index|loan.weight[index]
     );
 
-    (0..num_batches).into_par_iter().map(|index|{
+    let generate_loans_and_cf=||{
         let loans=get_loans(batch_size, num_macro, min_loan_size, max_loan_size);
         let full_exponent=get_full_exponent(x_min, x_max, u_steps, num_macro, &liquid_fn, &log_loan_cf_fn);
-        let complex_exponent=full_exponent(&loans); //and we have a num_u by num_systemic factor vector of vectors
-        //println!("num u {}:", complex_exponent.len());
+        full_exponent(&loans)
+    };
+    let mut cf_log=generate_loans_and_cf();
+    (1..num_batches).for_each(|_|{
+        generate_loans_and_cf().iter().enumerate().for_each(|(index, v)|{
+            cf_log[index]+=v;
+        });
     });
 
 
