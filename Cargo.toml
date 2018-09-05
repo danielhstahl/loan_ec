@@ -16,3 +16,7 @@ path = "src/bin/loan_cf.rs"
 # [[bin]]
 # name = "distribution_invert"
 # path = "src/bin/distribution_invert.rs"
+
+[lib]
+name = "vasicek"
+path = "src/lib/vasicek.rs"
