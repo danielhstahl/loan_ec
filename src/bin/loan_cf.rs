@@ -3,7 +3,7 @@ extern crate num_complex;
 extern crate rayon;
 extern crate cf_functions;
 extern crate rand;
-
+extern crate vasicek;
 use rand::prelude::*;
 use self::num_complex::Complex;
 use self::rayon::prelude::*;
@@ -210,6 +210,8 @@ fn main()-> Result<(), io::Error> {
         });
     });
 
+    
+    
 
     
     //println!("num systemic factor {}:", complex_exponent.first().unwrap().len());
