@@ -4,12 +4,21 @@ extern crate rayon;
 extern crate cf_functions;
 extern crate rand;
 extern crate vasicek;
+extern crate cf_dist_utils;
 use rand::prelude::*;
 use self::num_complex::Complex;
 use self::rayon::prelude::*;
 
-use std::env;
+#[macro_use]
+extern crate serde_json;
+
+
+use std::fs::File;
+use std::io::prelude::*;
+
 use std::io;
+
+
 
 
 struct Loan {
@@ -53,14 +62,14 @@ where
     T:Fn(&Complex<f64>)->Complex<f64>+std::marker::Sync+std::marker::Send,
     U: Fn(&Complex<f64>, &[Loan], usize)->Complex<f64>+std::marker::Sync+std::marker::Send
 {
-    let du=fang_oost::compute_du(x_min, x_max);
+    //let du=fang_oost::compute_du(x_min, x_max);
     move |loans:&[Loan]|{
-        (0..num_u).into_par_iter()
-            .flat_map(|u_index|{
+        fang_oost::get_u_domain(num_u, x_min, x_max)
+            .flat_map(|u|{
                 (0..num_systemic).map(|systemic_index|{
                     log_lpm_cf(
                         &get_liquidity(
-                            &fang_oost::get_complex_u(fang_oost::get_u(du, u_index))
+                            &u
                         ),
                         loans,
                         systemic_index
@@ -75,7 +84,7 @@ fn log_lpm_cf<T, U, V, W>(
     get_l:U,
     get_pd:V,
     get_w:W
-)->impl Fn(&Complex<f64>, &[Loan], usize)-> Complex<f64>//Iterator<Item = Complex<f64> >+std::marker::Sync+std::marker::Sized+std::marker::Send
+)->impl Fn(&Complex<f64>, &[Loan], usize)-> Complex<f64>
 where
     T:Fn(&Complex<f64>, f64)->Complex<f64> +std::marker::Sync+std::marker::Send,
     U:Fn(&Loan)->f64 +std::marker::Sync+std::marker::Send,
@@ -83,11 +92,9 @@ where
     W: Fn(&Loan, usize)->f64+std::marker::Sync+std::marker::Send
 { 
     move |u:&Complex<f64>, loans:&[Loan], index:usize|{
-        //(0..num_systemic_factors).map(move |index|{
-        loans.iter().fold(Complex::new(0.0, 0.0), |accum, loan|{
-            accum+(lgd_cf(u, get_l(loan))-1.0)*get_pd(loan)*get_w(loan, index)
-        })
-        //})//.collect()//array of size num_systemic_factors
+        loans.iter().map(|loan|{
+            (lgd_cf(u, get_l(loan))-1.0)*get_pd(loan)*get_w(loan, index)
+        }).sum()
     }
 }
 fn get_lgd_cf_fn(
@@ -114,7 +121,6 @@ fn get_rough_total_exposure(
 fn get_parameters(
     batch_size:usize,
     num_batches:usize,
-    num_weights:usize,
     min_loan_size:f64,
     max_loan_size:f64,
     max_possible_loss:f64
@@ -155,7 +161,7 @@ fn get_loans(
     batch_size:usize, num_macro:usize, 
     min_loan_size:f64, max_loan_size:f64
 )->Vec<Loan>{
-    (0..batch_size).map(|index|{
+    (0..batch_size).map(|_index|{
         Loan{
             balance:generate_balance(min_loan_size, max_loan_size),
             lgd:0.5,
@@ -165,14 +171,14 @@ fn get_loans(
     }).collect()
 }
 fn main()-> Result<(), io::Error> {
-    let args: Vec<String> = env::args().collect();
+    //let args: Vec<String> = env::args().collect();
     let batch_size:usize=1000;
     let num_batches:usize=1000;
-    let num_weights:usize=3;
     let min_loan_size=10000.0;
     let max_loan_size=50000.0;
+    let x_steps:usize=1024;
     let max_possible_loss=0.14;//more than this an HUGE loss
-    let num_macro=3;
+    let num_macro:usize=3;
     let Parameters{
         lambda,
         q,
@@ -185,7 +191,7 @@ fn main()-> Result<(), io::Error> {
         x_min,
         x_max
     }=get_parameters(
-        batch_size, num_batches, num_weights, 
+        batch_size, num_batches, 
         min_loan_size, max_loan_size, max_possible_loss
     );
     let liquid_fn=get_liquidity_risk_fn(lambda, q);
@@ -197,23 +203,45 @@ fn main()-> Result<(), io::Error> {
         |loan:&Loan|loan.pd,
         |loan:&Loan, index|loan.weight[index]
     );
-
+    let full_exponent=get_full_exponent(
+        x_min, x_max, u_steps, num_macro, 
+        &liquid_fn, &log_loan_cf_fn
+    );
     let generate_loans_and_cf=||{
         let loans=get_loans(batch_size, num_macro, min_loan_size, max_loan_size);
-        let full_exponent=get_full_exponent(x_min, x_max, u_steps, num_macro, &liquid_fn, &log_loan_cf_fn);
         full_exponent(&loans)
     };
-    let mut cf_log=generate_loans_and_cf();
+    let mut cf_log=generate_loans_and_cf(); //cf_log has length num_macro*u_steps
     (1..num_batches).for_each(|_|{
         generate_loans_and_cf().iter().enumerate().for_each(|(index, v)|{
             cf_log[index]+=v;
         });
     });
+    let y0=vec![0.9, 1.0, 1.1];
+    let alpha=vec![0.2, 0.3, 0.2];
+    let sigma=vec![0.4, 0.4, 0.3];
+    let rho=vec![1.0, -0.4, 0.2, -0.4, 1.0, 0.3, 0.2, 0.3, 1.0];
+    let expectation=vasicek::compute_integral_expectation_long_run_one(&y0, &alpha, t);
+    let variance=vasicek::compute_integral_variance(&alpha, &sigma, &rho, t);
+    let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
 
-    
-    
+    let final_cf:Vec<Complex<f64>>=fang_oost::get_discrete_cf_iterator(
+        u_steps, x_min, x_max, cf_log.par_chunks(num_macro).map(v_mgf)
+    );//final_cf has length u_steps
 
-    
-    //println!("num systemic factor {}:", complex_exponent.first().unwrap().len());
+    let x_domain:Vec<f64>=fang_oost::get_x_domain(x_steps, x_min, x_max).collect();
+    let density:Vec<f64>=fang_oost::get_density_x_discrete_cf(x_steps, x_min, x_max, &final_cf).collect();
+
+    let json_results=json!({"x":x_domain, "density":density});
+    let mut file = File::create("docs/loan_density.json")?;
+    file.write_all(json_results.to_string().as_bytes())?;
+    let (es, var)=cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+        0.01, 
+        x_min,
+        x_max,
+        &final_cf
+    );
+    println!("This is ES: {}", es);
+    println!("This is VaR: {}", var);
     Ok(())
 }

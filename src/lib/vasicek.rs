@@ -1,5 +1,9 @@
 extern crate num_complex;
 use self::num_complex::Complex;
+#[macro_use]
+#[cfg(test)]
+extern crate approx;
+
 fn help_compute_moments(
     alpha:f64,
     t:f64
@@ -104,7 +108,7 @@ pub fn compute_integral_variance(
 pub fn get_log_vasicek_mgf(
     expectation:Vec<f64>,
     variance:Vec<f64>
-)->impl Fn(&Vec<Complex<f64>>)->Complex<f64>{
+)->impl Fn(&[Complex<f64>])->Complex<f64>{
     let num_cols=expectation.len();
     move |u_vec|{
         expectation.iter().zip(u_vec).map(|(exp_increment, u_increment)|{
@@ -120,7 +124,7 @@ pub fn get_log_vasicek_mgf(
 pub fn get_vasicek_mgf(
     expectation:Vec<f64>,
     variance:Vec<f64>
-)->impl Fn(&Vec<Complex<f64>>)->Complex<f64>{
+)->impl Fn(&[Complex<f64>])->Complex<f64>{
     let log_vasicek_mgf=get_log_vasicek_mgf(expectation, variance);
     move |u_vec|log_vasicek_mgf(u_vec).exp()
 }
@@ -131,7 +135,6 @@ mod tests {
     #[test]
     fn test_get_two_d_array(){
         let arr=vec![1, 2, 3, 4, 5, 6];
-        //let result=get_two_d_array(1, 0, &arr)
         let num_cols=3;
         let row_index_1=1;
         let col_index_1=0;
@@ -142,18 +145,14 @@ mod tests {
     }
     #[test]
     fn test_get_one_d_array_outer(){
-        //let arr=vec![1, 2, 3, 4, 5, 6];
         let arr=vec![1, 2, 3];
-        //let result=get_two_d_array(1, 0, &arr)
         let num_cols=3;
         assert_eq!(get_one_d_array_outer_loop(4, num_cols, &arr), 2);
         assert_eq!(get_one_d_array_outer_loop(0, num_cols, &arr), 1);
     }
     #[test]
     fn test_get_one_d_array_inner(){
-        //let arr=vec![1, 2, 3, 4, 5, 6];
         let arr=vec![1, 2, 3];
-        //let result=get_two_d_array(1, 0, &arr)
         let num_cols=3;
         assert_eq!(get_one_d_array_inner_loop(4, num_cols, &arr), 2);
         assert_eq!(get_one_d_array_inner_loop(2, num_cols, &arr), 1);
@@ -165,7 +164,33 @@ mod tests {
         let alpha=vec![0.3];
         let beta=vec![0.5];
         let t=1.0;
-        //let single_expectation=
         assert_eq!(*compute_expectation(&y0, &alpha, &beta, t).first().unwrap(), beta[0]);
+    }
+    #[test]
+    fn test_combine_inner_and_outer(){
+        let u_array_test:Vec<u32>=vec![0, 1, 2];
+        let num_cols=u_array_test.len();
+        let expected_outer:Vec<u32>=vec![0, 1, 2, 0, 1, 2, 0, 1, 2];
+        let expected_inner:Vec<u32>=vec![0, 0, 0, 1, 1, 1, 2, 2, 2];
+        expected_inner.iter().zip(expected_outer).enumerate().for_each(|(index, (inner, outer))|{
+            assert_eq!(inner, &get_one_d_array_inner_loop(index, num_cols, &u_array_test));
+            assert_eq!(outer, get_one_d_array_outer_loop(index, num_cols, &u_array_test));
+        });
+    }
+    #[test]
+    fn test_vasicek_mgf(){
+        let y0=vec![0.9, 1.0, 1.1];
+        let alpha=vec![0.2, 0.3, 0.2];
+        let sigma=vec![0.2, 0.1, 0.2];
+        let rho=vec![1.0, -0.4, 0.2, -0.4, 1.0, 0.3, 0.2, 0.3, 1.0];
+        //this comes from c++ implementation https://github.com/phillyfan1138/Vasicek
+        let expected=Complex::new(-19.9588, 2.253);
+        let t=1.0;
+        let expectation=compute_integral_expectation_long_run_one(&y0, &alpha, t);
+        let variance=compute_integral_variance(&alpha, &sigma, &rho, t);
+        let v_mgf=get_vasicek_mgf(expectation, variance);
+        let result=v_mgf(&vec![Complex::new(1.0, 1.0), Complex::new(1.0, 1.0), Complex::new(1.0, 1.0)]);
+        assert_abs_diff_eq!(result.re, expected.re, epsilon=0.0001);
+        assert_abs_diff_eq!(result.im, expected.im, epsilon=0.0001);
     }
 }
