@@ -62,7 +62,6 @@ where
     T:Fn(&Complex<f64>)->Complex<f64>+std::marker::Sync+std::marker::Send,
     U: Fn(&Complex<f64>, &[Loan], usize)->Complex<f64>+std::marker::Sync+std::marker::Send
 {
-    //let du=fang_oost::compute_du(x_min, x_max);
     move |loans:&[Loan]|{
         fang_oost::get_u_domain(num_u, x_min, x_max)
             .flat_map(|u|{
@@ -130,9 +129,10 @@ fn get_parameters(
         max_loan_size,
         num_batches*batch_size
     );
+    let lambda=0.7*exposure*max_possible_loss; //need to be less than max loss in dollars
     Parameters{
-        lambda:0.2*exposure,
-        q:0.1/exposure,
+        lambda,
+        q:0.2/lambda,
         alpha_l:0.2,
         b_l:0.5,
         sig_l:0.2,
@@ -235,10 +235,15 @@ fn main()-> Result<(), io::Error> {
     let json_results=json!({"x":x_domain, "density":density});
     let mut file = File::create("docs/loan_density.json")?;
     file.write_all(json_results.to_string().as_bytes())?;
+
+    let max_iterations=100;
+    let tolerance=0.0001;
     let (es, var)=cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
         0.01, 
         x_min,
         x_max,
+        max_iterations,
+        tolerance,
         &final_cf
     );
     println!("This is ES: {}", es);

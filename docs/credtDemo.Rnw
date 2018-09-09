@@ -10,7 +10,7 @@ The density of these loans is as follows:
 <<echo=FALSE>>=
 require(jsonlite)
 base='./'
-base='~/Documents/Code/rust/credit_faas_demo/docs/'
+base='~/Documents/Rust/credit_faas_demo/docs/'
 #results=fromJSON(readLines(paste0(base, 'loan_density.json')))
 results=fromJSON(paste0(base, 'loan_density.json'))
 @
