@@ -225,12 +225,10 @@ fn main()-> Result<(), io::Error> {
     let variance=vasicek::compute_integral_variance(&alpha, &sigma, &rho, t);
     let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
 
-    let final_cf:Vec<Complex<f64>>=fang_oost::get_discrete_cf_iterator(
-        u_steps, x_min, x_max, cf_log.par_chunks(num_macro).map(v_mgf)
-    );//final_cf has length u_steps
+    let final_cf:Vec<Complex<f64>>=cf_log.par_chunks(num_macro).map(v_mgf).collect();//final_cf has length u_steps
 
     let x_domain:Vec<f64>=fang_oost::get_x_domain(x_steps, x_min, x_max).collect();
-    let density:Vec<f64>=fang_oost::get_density_x_discrete_cf(x_steps, x_min, x_max, &final_cf).collect();
+    let density:Vec<f64>=fang_oost::get_density(x_min, x_max, fang_oost::get_x_domain(x_steps, x_min, x_max), &final_cf).collect();
 
     let json_results=json!({"x":x_domain, "density":density});
     let mut file = File::create("docs/loan_density.json")?;
