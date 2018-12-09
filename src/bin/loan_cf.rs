@@ -10,25 +10,17 @@ use self::num_complex::Complex;
 use self::rayon::prelude::*;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
 extern crate serde_json;
-
-
-use std::fs::File;
-use std::io::prelude::*;
-
 use std::io;
-
-
 
 #[derive(Debug,Deserialize)]
 struct Loan {
     balance:f64,
     pd:f64,
     lgd:f64,
-    //#[serde(flatten)]
-    weight: Vec<f64>
+    weight:Vec<f64>
 }
+
 #[derive(Debug,Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Parameters {
@@ -66,10 +58,10 @@ struct HoldDiscreteCF {
 }
 
 fn get_col_from_index(index:usize, num_row:usize)->usize {
-    index%num_row
+    index/num_row
 }
-fn get_row_from_index(index:usize, num_col:usize)->usize {
-    index/num_col
+fn get_row_from_index(index:usize, num_row:usize)->usize {
+    index%num_row
 }
 /*fn get_element_at<T>(arbitrary_vec:&[T], num_rows:usize, row_num:usize, col_num:usize)->T{
     arbitrary_vec[col_num*num_rows+row_num]
@@ -85,9 +77,10 @@ impl HoldDiscreteCF {
             x_max
         }
     }
-    /*pub fn get_element_at(&self, row_num: usize, col_num: usize)->&Complex<f64>{
-        get_element_at(&self.cf, self.num_u, row_num, col_num)
-    }*/
+    #[cfg(test)]
+    pub fn get_cf(&self)->&Vec<Complex<f64>>{
+        return &self.cf
+    }
     pub fn process_loan<U>(
         &mut self, loan: 
         &Loan, 
@@ -103,11 +96,9 @@ impl HoldDiscreteCF {
                     loan
                 )
             }).collect(); 
-        let num_u=self.num_u;
         let num_w=self.num_w;
         self.cf.par_iter_mut().enumerate().for_each(|(index, elem)|{
-        //for (index, elem) in self.cf.par_iter_mut().enumerate(){
-            let row_num=get_row_from_index(index, num_u);
+            let row_num=get_row_from_index(index, num_w);
             let col_num=get_col_from_index(index, num_w);
             *elem+=vec_of_cf_u[col_num]*loan.weight[row_num];
         });
@@ -173,10 +164,9 @@ fn main()-> Result<(), io::Error> {
         // Notice that we need to provide a type hint for automatic
         // deserialization.
         let loan: Loan = result?;
+        //println!("{:?}", loan);
         discrete_cf.process_loan(&loan, &log_lpm_cf);
-        //println!("{:?}", record);
     }
-
     
     let expectation=vasicek::compute_integral_expectation_long_run_one(
         &y0, &alpha, t
@@ -188,11 +178,6 @@ fn main()-> Result<(), io::Error> {
     let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
 
     let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
-
-    /*let x_domain:Vec<f64>=fang_oost::get_x_domain(
-        num_x, x_min, x_max
-    ).collect();*/
-    //let density:Vec<f64>=fang_oost::get_density(x_min, x_max, fang_oost::get_x_domain(x_steps, x_min, x_max), &final_cf).collect();
 
     let max_iterations=100;
     let tolerance=0.0001;
@@ -212,7 +197,86 @@ fn main()-> Result<(), io::Error> {
 mod tests {
     use super::*;
     #[test]
-    fn get_(){
-
+    fn col_from_index_correctly_gets_index(){
+        let result=get_col_from_index(3, 2);
+        assert_eq!(result, 1);//zero based
+    }
+    #[test]
+    fn col_from_index_correctly_gets_index_at_begin(){
+        let result=get_col_from_index(2, 2);
+        assert_eq!(result, 1);//zero based
+    }
+    #[test]
+    fn col_from_index_correctly_gets_index_at_end(){
+        let result=get_col_from_index(1, 2);
+        assert_eq!(result, 0);//zero based
+    }
+    #[test]
+    fn col_from_index_correctly_gets_index_one_row(){
+        let result=get_col_from_index(1, 1);
+        assert_eq!(result, 1);//zero based
+    }
+    #[test]
+    fn col_from_index_correctly_gets_index_one_row_two(){
+        let result=get_col_from_index(2, 1);
+        assert_eq!(result, 2);//zero based
+    }
+    #[test]
+    fn row_from_index_correctly_gets_index(){
+        let result=get_row_from_index(3, 2);
+        assert_eq!(result, 1);//zero based
+    }
+    #[test]
+    fn row_from_index_correctly_gets_index_at_begin(){
+        let result=get_row_from_index(2, 2);
+        assert_eq!(result, 0);//zero based
+    }
+    #[test]
+    fn row_from_index_correctly_gets_index_at_end(){
+        let result=get_row_from_index(1, 2);
+        assert_eq!(result, 1);//zero based
+    }
+    #[test]
+    fn row_from_index_correctly_gets_index_one_row(){
+        let result=get_row_from_index(1, 1);
+        assert_eq!(result, 0);//zero based
+    }
+    #[test]
+    fn row_from_index_correctly_gets_index_one_row_two(){
+        let result=get_row_from_index(2, 1);
+        assert_eq!(result, 0);//zero based
+    }
+    #[test]
+    fn construct_hold_discrete_cf(){
+        let discrete_cf=HoldDiscreteCF::new(
+            256, 3, 0.0, 1.0
+        );
+        let cf=discrete_cf.get_cf();
+        assert_eq!(cf.len(), 256*3);
+        assert_eq!(cf[0], Complex::new(0.0, 0.0)); //first three should be the same "u"
+        assert_eq!(cf[1], Complex::new(0.0, 0.0));
+        assert_eq!(cf[2], Complex::new(0.0, 0.0));
+    }
+    #[test]
+    fn test_process_loan(){
+        let mut discrete_cf=HoldDiscreteCF::new(
+            256, 3, 0.0, 1.0
+        );
+        let loan=Loan{
+            pd:0.05,
+            lgd:0.5,
+            balance:1000.0,
+            weight:vec![0.5, 0.5, 0.5]
+        };
+        let log_lpm_cf=|_u:&Complex<f64>, _loan:&Loan|{
+            Complex::new(1.0, 0.0)
+        };
+        discrete_cf.process_loan(&loan, &log_lpm_cf);
+        let cf=discrete_cf.get_cf();
+        assert_eq!(cf.len(), 256*3);
+        cf.iter().for_each(|cf_el|{
+            assert_eq!(cf_el, &Complex::new(0.5 as f64, 0.0 as f64));
+        });
+        
     }
 }

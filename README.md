@@ -18,7 +18,9 @@ The model allows for:
 
 `cargo build --release`
 
-`./target/release/loan_cf`
+## How to run
+
+`./target/release/loan_cf $(cat ./data/parameters.json) < data/data.csv`
 
 ## Roadmap
 
