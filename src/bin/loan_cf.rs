@@ -120,13 +120,15 @@ impl HoldDiscreteCF {
     }
 }
 
-fn get_log_lpm_cf<T>(
-    lgd_cf:T
+fn get_log_lpm_cf<T, U>(
+    lgd_cf:T,
+    liquidity_cf:U
 )-> impl Fn(&Complex<f64>, &Loan)->Complex<f64>
-    where T: Fn(&Complex<f64>, f64)->Complex<f64>
+    where T: Fn(&Complex<f64>, f64)->Complex<f64>,
+          U: Fn(&Complex<f64>)->Complex<f64>
 {
     move |u:&Complex<f64>, loan:&Loan|{
-        (lgd_cf(u, loan.lgd*loan.balance)-1.0)*loan.pd
+        (lgd_cf(&liquidity_cf(u), loan.lgd*loan.balance)-1.0)*loan.pd
     }
 }
 
@@ -158,7 +160,7 @@ fn main()-> Result<(), io::Error> {
     let liquid_fn=get_liquidity_risk_fn(lambda, q);
     let lgd_fn=get_lgd_cf_fn(alpha_l, b_l, sig_l, t, b_l);//assumption is that it starts at the lgd mean...
     
-    let log_lpm_cf=get_log_lpm_cf(&lgd_fn);
+    let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
 
     let mut discrete_cf=HoldDiscreteCF::new(
         num_u, num_w, 
@@ -205,4 +207,12 @@ fn main()-> Result<(), io::Error> {
     println!("This is ES: {}", es);
     println!("This is VaR: {}", var);
     Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn get_(){
+
+    }
 }

@@ -1,0 +1,16 @@
+{
+    "lambda":f64,
+    "q":f64,
+    "alpha_l":f64,
+    "b_l":f64,
+    "sig_l":f64,
+    "t":f64,
+    "num_u":usize,
+    "x_min":f64,
+    "x_max":f64,
+    "num_x":Option<usize>,
+    "alpha":Vec<f64>,
+    "sigma":Vec<f64>,
+    "rho":Vec<f64>,
+    "y0":Vec<f64>
+}
