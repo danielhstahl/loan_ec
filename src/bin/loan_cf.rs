@@ -12,9 +12,10 @@ use self::num_complex::Complex;
 use self::rayon::prelude::*;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
 extern crate serde_json;
 use std::io;
-
+use std::io::prelude::*; //needed for write
 use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
@@ -73,7 +74,7 @@ impl HoldDiscreteCF {
             x_max
         }
     }
-    //#[cfg(test)]
+    #[cfg(test)]
     pub fn get_cf(&self)->&Vec<Complex<f64>>{
         return &self.cf
     }
@@ -183,9 +184,9 @@ fn main()-> Result<(), io::Error> {
     let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
 
 
-    for cf_inc in discrete_cf.get_cf(){
+    /*for cf_inc in discrete_cf.get_cf(){
         println!("this is cf before vas {}", cf_inc);
-    }
+    }*/
 
     
 
@@ -194,6 +195,14 @@ fn main()-> Result<(), io::Error> {
     /*for cf_inc in final_cf.iter(){
         println!("{}", cf_inc);
     }*/
+
+
+    let x_domain:Vec<f64>=fang_oost::get_x_domain(1024, x_min, x_max).collect();
+    let density:Vec<f64>=fang_oost::get_density(x_min, x_max, fang_oost::get_x_domain(1024, x_min, x_max), &final_cf).collect();
+    let json_results=json!({"x":x_domain, "density":density});
+    let mut file_w = File::create("docs/loan_density_2.json")?;
+    file_w.write_all(json_results.to_string().as_bytes())?;
+
     let max_iterations=100;
     let tolerance=0.0001;
     let (es, var)=cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
