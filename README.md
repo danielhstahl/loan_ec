@@ -20,7 +20,7 @@ The model allows for:
 
 ## How to run
 
-`./target/release/loan_cf $(cat ./data/parameters.json) < data/data.csv`
+`./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans.json`
 
 ## Roadmap
 
