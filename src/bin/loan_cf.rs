@@ -119,7 +119,7 @@ fn get_log_lpm_cf<T, U>(
         (lgd_cf(&liquidity_cf(u), loan.lgd*loan.balance)-1.0)*loan.pd
     }
 }
-
+//const MY_TEST_LOWER_BALANCE:f64=50000.0;
 fn get_lgd_cf_fn(
     speed:f64,
     long_run_average:f64,
@@ -151,7 +151,9 @@ fn main()-> Result<(), io::Error> {
     let num_w=alpha.len();
     let liquid_fn=get_liquidity_risk_fn(lambda, q);
     let lgd_fn=get_lgd_cf_fn(alpha_l, b_l, sig_l, t, b_l);//assumption is that it starts at the lgd mean...
-    
+    /*let lgd_fn=|u:&Complex<f64>, l:f64|{
+        (u*l).exp()
+    };*/
     let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
 
     let mut discrete_cf=HoldDiscreteCF::new(
@@ -174,29 +176,9 @@ fn main()-> Result<(), io::Error> {
         &rho, t
     );
 
-    /*for v_inc in variance.iter(){
-        println!("this is variance {}", v_inc);
-    }
-    for v_inc in expectation.iter(){
-        println!("this is expectation {}", v_inc);
-    }*/
-
     let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
 
-
-    /*for cf_inc in discrete_cf.get_cf(){
-        println!("this is cf before vas {}", cf_inc);
-    }*/
-
-    
-
     let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&test_mgf);
-    //println!("{}", final_cf[0]);
-    /*for cf_inc in final_cf.iter(){
-        println!("{}", cf_inc);
-    }*/
-
-
     let x_domain:Vec<f64>=fang_oost::get_x_domain(1024, x_min, x_max).collect();
     let density:Vec<f64>=fang_oost::get_density(x_min, x_max, fang_oost::get_x_domain(1024, x_min, x_max), &final_cf).collect();
     let json_results=json!({"x":x_domain, "density":density});
@@ -274,6 +256,63 @@ mod tests {
         final_cf.iter().for_each(|cf_el|{
             assert_eq!(cf_el, &Complex::new(1.5 as f64, 0.0 as f64).exp());
         });
+    }
+    #[test]
+    fn test_actually_get_density(){
+        let x_min=-10000.0;
+        let x_max=0.0;
+        let mut discrete_cf=HoldDiscreteCF::new(
+            256, 1, x_min, x_max
+        );
+        let lambda=15.0;
+        let q=0.00001;
+        let lgd_fn=|u:&Complex<f64>, l:f64|{
+            (u*l).exp()
+        };
+        let liquid_fn=get_liquidity_risk_fn(lambda, q);
+        //let lgd_fn=get_lgd_cf_fn(alpha_l, b_l, sig_l, t, b_l);//assumption is that it starts at the lgd mean...
+    
+        let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
+        let num_loans:usize=10000;
+        for _ in 0..num_loans{
+            let loan=Loan{
+                pd:0.05,
+                lgd:0.5,
+                balance:1.0,
+                weight:vec![1.0]
+            };
+            discrete_cf.process_loan(&loan, &log_lpm_cf);
+        }
+        let y0=vec![1.0];
+        let alpha=vec![0.3];
+        let sigma=vec![0.3];
+        let rho=vec![1.0];
+        let t=1.0;
+        let expectation=vasicek::compute_integral_expectation_long_run_one(
+            &y0, &alpha, t
+        );
+        let variance=vasicek::compute_integral_variance(
+            &alpha, &sigma, 
+            &rho, t
+        );
+
+        let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
         
+        let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
+    
+        assert_eq!(final_cf.len(), 256);
+        let max_iterations=100;
+        let tolerance=0.0001;
+        let (es, var)=cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+            0.01, 
+            x_min,
+            x_max,
+            max_iterations,
+            tolerance,
+            &final_cf
+        );
+        println!("this is es: {}", es);
+        println!("this is var: {}", var);
+        assert!(es>var);
     }
 }
