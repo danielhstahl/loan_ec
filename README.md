@@ -33,6 +33,6 @@ Goals (decreasing order of importance):
 
 Success Criteria
 
-* 1,000,000 loans in under 5 seconds on  i5-5250U CPU @ 1.60GHz × 4 (not done)
+* 1,000,000 loans in under 5 seconds on  i5-5250U CPU @ 1.60GHz × 4 (not done, maybe not possible especially when reading from disk)
 * Reproducable (same output given same input) (done)
 * Transparent (easy to replicate) (done)
