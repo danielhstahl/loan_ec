@@ -26,13 +26,13 @@ The model allows for:
 
 Goals (decreasing order of importance):
 
-* Ingest loan level parameters (balance, pd, lgd, ...etc) to create a loss characteristic function
-* High memory efficiency (don't store much data in ram)
-* Parallelizable given a batch of loans
-* Parallelizable over batches of loans (ie, make batches of loans independent of each other)
+* Ingest loan level parameters (balance, pd, lgd, ...etc) to create a loss characteristic function (done)
+* High memory efficiency (don't store much data in ram) (done)
+* Parallelizable given a batch of loans (not done)
+* Parallelizable over batches of loans (ie, make batches of loans independent of each other) (not done)
 
 Success Criteria
 
-* 1,000,000 loans in under 5 seconds on  i5-5250U CPU @ 1.60GHz × 4 
-* Reproducable (same output given same input)
-* Transparent (easy to replicate)
+* 1,000,000 loans in under 5 seconds on  i5-5250U CPU @ 1.60GHz × 4 (not done)
+* Reproducable (same output given same input) (done)
+* Transparent (easy to replicate) (done)
