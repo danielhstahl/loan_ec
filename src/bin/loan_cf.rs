@@ -119,7 +119,6 @@ fn get_log_lpm_cf<T, U>(
         (lgd_cf(&liquidity_cf(u), loan.lgd*loan.balance)-1.0)*loan.pd
     }
 }
-//const MY_TEST_LOWER_BALANCE:f64=50000.0;
 fn get_lgd_cf_fn(
     speed:f64,
     long_run_average:f64,
@@ -134,7 +133,7 @@ fn get_lgd_cf_fn(
         )
     }   
 }
-
+#[cfg(test)]
 fn test_mgf(u_weights:&[Complex<f64>])->Complex<f64>{
     u_weights.iter()
         .sum::<Complex<f64>>().exp()
@@ -178,9 +177,13 @@ fn main()-> Result<(), io::Error> {
 
     let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
 
-    let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&test_mgf);
+    let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
     let x_domain:Vec<f64>=fang_oost::get_x_domain(1024, x_min, x_max).collect();
-    let density:Vec<f64>=fang_oost::get_density(x_min, x_max, fang_oost::get_x_domain(1024, x_min, x_max), &final_cf).collect();
+    let density:Vec<f64>=fang_oost::get_density(
+        x_min, x_max, 
+        fang_oost::get_x_domain(1024, x_min, x_max), 
+        &final_cf
+    ).collect();
     let json_results=json!({"x":x_domain, "density":density});
     let mut file_w = File::create("docs/loan_density_2.json")?;
     file_w.write_all(json_results.to_string().as_bytes())?;
@@ -259,18 +262,20 @@ mod tests {
     }
     #[test]
     fn test_actually_get_density(){
-        let x_min=-10000.0;
+        let x_min=-6000.0;
         let x_max=0.0;
         let mut discrete_cf=HoldDiscreteCF::new(
             256, 1, x_min, x_max
         );
-        let lambda=15.0;
-        let q=0.00001;
-        let lgd_fn=|u:&Complex<f64>, l:f64|{
-            (u*l).exp()
-        };
+        let lambda=1000.0;
+        let q=0.0001;
         let liquid_fn=get_liquidity_risk_fn(lambda, q);
-        //let lgd_fn=get_lgd_cf_fn(alpha_l, b_l, sig_l, t, b_l);//assumption is that it starts at the lgd mean...
+
+        let t=1.0;
+        let alpha_l=0.2;
+        let b_l=1.0;
+        let sig_l=0.2;
+        let lgd_fn=get_lgd_cf_fn(alpha_l, b_l, sig_l, t, b_l);//assumption is that it starts at the lgd mean...
     
         let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
         let num_loans:usize=10000;
@@ -299,11 +304,14 @@ mod tests {
         let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
         
         let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
-    
+
         assert_eq!(final_cf.len(), 256);
         let max_iterations=100;
         let tolerance=0.0001;
-        let (es, var)=cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+        let (
+            es, 
+            var
+        )=cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
             0.01, 
             x_min,
             x_max,
