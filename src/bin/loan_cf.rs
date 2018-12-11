@@ -150,16 +150,12 @@ fn main()-> Result<(), io::Error> {
     let num_w=alpha.len();
     let liquid_fn=get_liquidity_risk_fn(lambda, q);
     let lgd_fn=get_lgd_cf_fn(alpha_l, b_l, sig_l, t, b_l);//assumption is that it starts at the lgd mean...
-    /*let lgd_fn=|u:&Complex<f64>, l:f64|{
-        (u*l).exp()
-    };*/
     let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
 
     let mut discrete_cf=HoldDiscreteCF::new(
         num_u, num_w, 
         x_min, x_max
     );
-    //let f = File::open("./data/loans.json")?;
     let f = File::open(args[2].as_str())?;
     let file = BufReader::new(&f);
     for line in file.lines() {
