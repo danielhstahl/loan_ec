@@ -15,22 +15,56 @@ The model allows for:
 * Efficiency: near real-time computation
 
 ## How to build
+First, download this repo:
+`git clone https://github.com/phillyfan1138/credit_faas_demo`
 
+Change directory into the folder:
+`cd credit_faas_demo`
+
+This repo contains test files that are quite large.  I use [git-lfs](https://git-lfs.github.com/) to handle these files.  If you already have git-lfs installed, the files should be downloaded automatically.  If you cloned the repo without git-lfs installed, after installation run:
+`git-lfs fetch`
+
+Regardless of whether you download the test files, you can build the binaries with:
 `cargo build --release`
 
-`./target/release/loan_cf`
+## How to run
+To get the expected shortfall and value at risk for granular (1 million) loans, run the following:
+
+`./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans.json`
+
+With option density export:
+
+`./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans.json ./docs/loan_density_full.json`
+
+## Recommended implementation
+In a real production setting, there will typically be a finite set of segments that describe loans.  For example, a loan may have one of 10 risk ratings and one of 10 facility grades.  Loans may also be grouped by rough exposure amount (eg, roughly 10 seperate exposures).  This leads to 1000 different combinations.  Instead of simulating over every single loan, the model could simulate over each group, with each group multiplied by the number of loans in each group.  If there are 30 loans with risk rating 4, facility grade 6, and in exposure segment 5, then the exponent of the characteristic function would be 30*p(e^{uil}-1) where p is the probability of default associated with risk rating 4 and l is the combined dollar loss for a loan in segment 5 and facility grade 6.  
+
+This will dramatically decrease the computation time.
+
+To run the demo for this recommended implementation, 
+
+`./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans_grouped.json`
+
+With option density export:
+
+`./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans_grouped.json ./docs/loan_density_aggr.json`
+
+
+## Comparison of granular and recommended implementations
+
+Note that these plots were generated using two different simulations and are not intended to represent the same loan portfolio.  The differences when applied to a real loan portfolio should be minimal.
+
+![](docs/density_compare.jpg?raw=true)
 
 ## Roadmap
 
 Goals (decreasing order of importance):
 
-* Ingest loan level parameters (balance, pd, lgd, ...etc) to create a loss characteristic function
-* High memory efficiency (don't store much data in ram)
-* Parallelizable given a batch of loans
-* Parallelizable over batches of loans (ie, make batches of loans independent of each other)
+* Ingest loan level parameters (balance, pd, lgd, ...etc) to create a loss characteristic function (done)
+* High memory efficiency (don't store much data in ram) (done)
 
 Success Criteria
 
-* 1,000,000 loans in under 5 seconds on  i5-5250U CPU @ 1.60GHz × 4 
-* Reproducable (same output given same input)
-* Transparent (easy to replicate)
+* 1,000,000 loans in under 5 seconds on  i5-5250U CPU @ 1.60GHz × 4 (done after aggregations)
+* Reproducible (same output given same input) (done)
+* Transparent (easy to replicate) (done)

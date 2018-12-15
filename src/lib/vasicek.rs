@@ -1,9 +1,6 @@
 extern crate num_complex;
 use self::num_complex::Complex;
-#[macro_use]
-#[cfg(test)]
-extern crate approx;
-
+use vec_to_mat;
 fn help_compute_moments(
     alpha:f64,
     t:f64
@@ -61,27 +58,20 @@ pub fn compute_integral_expectation_long_run_one(
         (y_init-1.0)*help_compute_moments(alpha_item, t)+t
     }).collect()
 }
-fn get_two_d_array<T:Copy>(
-    row_num:usize,
-    col_num:usize,
-    num_cols:usize,
-    array:&[T]
-)->T{
-    array[row_num*num_cols+col_num]
-}
-fn get_one_d_array_outer_loop<T:Copy>(
+
+fn get_one_d_array_outer_loop<T>(
     index:usize, 
-    num_cols:usize,
+    num_rows:usize,
     array:&[T]
-)->T {
-    array[index%num_cols]
+)->&T {
+    &array[vec_to_mat::get_row_from_index(index, num_rows)]
 }
-fn get_one_d_array_inner_loop<T:Copy>(
+fn get_one_d_array_inner_loop<T>(
     index:usize, 
-    num_cols:usize,
+    num_rows:usize,
     array:&[T]
-)->T {
-    array[index/num_cols] //rounds down
+)->&T {
+    &array[vec_to_mat::get_col_from_index(index, num_rows)] //rounds down
 }
 pub fn compute_integral_variance(
     alpha:&[f64],
@@ -89,13 +79,15 @@ pub fn compute_integral_variance(
     rho:&[f64],
     t:f64
 )->Vec<f64>{
-    let num_cols=alpha.len();
+    let num_rows=alpha.len();
     alpha.iter().zip(sigma).enumerate().flat_map(|(i, (&alpha_elem_i, &sigma_elem_i))|{
         let a_i=help_compute_moments(alpha_elem_i, t);
         alpha.iter().zip(sigma).enumerate().map(move |(j, (&alpha_elem_j, &sigma_elem_j))|{
             let a_j=help_compute_moments(alpha_elem_j, t);
             cross_multiply(
-                get_two_d_array(i, j, num_cols, rho),
+                *vec_to_mat::get_element_from_matrix(
+                    i, j, num_rows, rho
+                ),
                 sigma_elem_i,
                 sigma_elem_j, 
                 alpha_elem_i,
@@ -109,14 +101,14 @@ pub fn get_log_vasicek_mgf(
     expectation:Vec<f64>,
     variance:Vec<f64>
 )->impl Fn(&[Complex<f64>])->Complex<f64>{
-    let num_cols=expectation.len();
+    let num_rows=expectation.len();
     move |u_vec|{
         expectation.iter().zip(u_vec).map(|(exp_increment, u_increment)|{
             exp_increment*u_increment
         }).sum::<Complex<f64>>()+variance.iter().enumerate().map(|(index, var_increment)|{
             var_increment
-                *get_one_d_array_inner_loop(index, num_cols, u_vec)
-                *get_one_d_array_outer_loop(index, num_cols, u_vec)
+                *get_one_d_array_inner_loop(index, num_rows, u_vec)
+                *get_one_d_array_outer_loop(index, num_rows, u_vec)
         }).sum::<Complex<f64>>()*0.5
     }
 }
@@ -132,31 +124,21 @@ pub fn get_vasicek_mgf(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn test_get_two_d_array(){
-        let arr=vec![1, 2, 3, 4, 5, 6];
-        let num_cols=3;
-        let row_index_1=1;
-        let col_index_1=0;
-        let row_index_2=0;
-        let col_index_2=1;
-        assert_eq!(get_two_d_array(row_index_1, col_index_1, num_cols, &arr), 4);
-        assert_eq!(get_two_d_array(row_index_2, col_index_2, num_cols, &arr), 2);
-    }
+    
     #[test]
     fn test_get_one_d_array_outer(){
         let arr=vec![1, 2, 3];
         let num_cols=3;
-        assert_eq!(get_one_d_array_outer_loop(4, num_cols, &arr), 2);
-        assert_eq!(get_one_d_array_outer_loop(0, num_cols, &arr), 1);
+        assert_eq!(*get_one_d_array_outer_loop(4, num_cols, &arr), 2);
+        assert_eq!(*get_one_d_array_outer_loop(0, num_cols, &arr), 1);
     }
     #[test]
     fn test_get_one_d_array_inner(){
         let arr=vec![1, 2, 3];
         let num_cols=3;
-        assert_eq!(get_one_d_array_inner_loop(4, num_cols, &arr), 2);
-        assert_eq!(get_one_d_array_inner_loop(2, num_cols, &arr), 1);
-        assert_eq!(get_one_d_array_inner_loop(0, num_cols, &arr), 1);
+        assert_eq!(*get_one_d_array_inner_loop(4, num_cols, &arr), 2);
+        assert_eq!(*get_one_d_array_inner_loop(2, num_cols, &arr), 1);
+        assert_eq!(*get_one_d_array_inner_loop(0, num_cols, &arr), 1);
     }
     #[test]
     fn test_compute_expectation_long_run(){
@@ -173,8 +155,8 @@ mod tests {
         let expected_outer:Vec<u32>=vec![0, 1, 2, 0, 1, 2, 0, 1, 2];
         let expected_inner:Vec<u32>=vec![0, 0, 0, 1, 1, 1, 2, 2, 2];
         expected_inner.iter().zip(expected_outer).enumerate().for_each(|(index, (inner, outer))|{
-            assert_eq!(inner, &get_one_d_array_inner_loop(index, num_cols, &u_array_test));
-            assert_eq!(outer, get_one_d_array_outer_loop(index, num_cols, &u_array_test));
+            assert_eq!(inner, get_one_d_array_inner_loop(index, num_cols, &u_array_test));
+            assert_eq!(&outer, get_one_d_array_outer_loop(index, num_cols, &u_array_test));
         });
     }
     #[test]

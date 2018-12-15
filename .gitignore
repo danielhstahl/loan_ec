@@ -2,3 +2,7 @@
 **/*.rs.bk
 *.log
 *.gz
+node_modules
+*.js
+package.json
+package-lock.json
