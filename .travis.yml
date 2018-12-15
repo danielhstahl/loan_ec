@@ -1,4 +1,4 @@
-anguage: rust
+language: rust
 sudo: required
 rust:
 - stable
