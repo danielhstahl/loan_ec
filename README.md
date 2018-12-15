@@ -15,10 +15,20 @@ The model allows for:
 * Efficiency: near real-time computation
 
 ## How to build
+First, download this repo:
+`git clone https://github.com/phillyfan1138/credit_faas_demo`
 
+Change directory into the folder:
+`cd credit_faas_demo`
+
+This repo contains test files that are quite large.  I use [git-lfs](https://git-lfs.github.com/) to handle these files.  If you already have git-lfs installed, the files should be downloaded automatically.  If you cloned the repo without git-lfs installed, after installation run:
+`git-lfs fetch`
+
+Regardless of whether you download the test files, you can build the binaries with:
 `cargo build --release`
 
 ## How to run
+To get the expected shortfall and value at risk for granular (1 million) loans, run the following:
 
 `./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans.json`
 
