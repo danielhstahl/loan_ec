@@ -24,7 +24,13 @@ struct Loan {
     balance:f64,
     pd:f64,
     lgd:f64,
-    weight:Vec<f64>
+    weight:Vec<f64>,
+    #[serde(default = "default_num")]
+    num:f64
+}
+
+fn default_num()->f64{
+    1.0
 }
 
 #[derive(Debug,Deserialize)]
@@ -89,7 +95,7 @@ impl HoldDiscreteCF {
         self.cf.par_iter_mut().enumerate().for_each(|(index, elem)|{
             let row_num=vec_to_mat::get_row_from_index(index, num_w);
             let col_num=vec_to_mat::get_col_from_index(index, num_w);
-            *elem+=vec_of_cf_u[col_num]*loan.weight[row_num];
+            *elem+=vec_of_cf_u[col_num]*loan.weight[row_num]*loan.num;
         });
     }
     pub fn get_full_cf<U>(&self, mgf:U)->Vec<Complex<f64>>
@@ -170,15 +176,18 @@ fn main()-> Result<(), io::Error> {
     let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
 
     let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
-    let x_domain:Vec<f64>=fang_oost::get_x_domain(1024, x_min, x_max).collect();
-    let density:Vec<f64>=fang_oost::get_density(
-        x_min, x_max, 
-        fang_oost::get_x_domain(1024, x_min, x_max), 
-        &final_cf
-    ).collect();
-    let json_results=json!({"x":x_domain, "density":density});
-    let mut file_w = File::create("docs/loan_density_2.json")?;
-    file_w.write_all(json_results.to_string().as_bytes())?;
+    if args.len()>3 {
+        let x_domain:Vec<f64>=fang_oost::get_x_domain(1024, x_min, x_max).collect();
+        let density:Vec<f64>=fang_oost::get_density(
+            x_min, x_max, 
+            fang_oost::get_x_domain(1024, x_min, x_max), 
+            &final_cf
+        ).collect();
+        let json_results=json!({"x":x_domain, "density":density});
+        let mut file_w = File::create(args[3].as_str())?;
+        file_w.write_all(json_results.to_string().as_bytes())?;
+    }
+    
 
     let max_iterations=100;
     let tolerance=0.0001;
@@ -217,7 +226,8 @@ mod tests {
             pd:0.05,
             lgd:0.5,
             balance:1000.0,
-            weight:vec![0.5, 0.5, 0.5]
+            weight:vec![0.5, 0.5, 0.5],
+            num:1.0
         };
         let log_lpm_cf=|_u:&Complex<f64>, _loan:&Loan|{
             Complex::new(1.0, 0.0)
@@ -242,7 +252,8 @@ mod tests {
             pd:0.05,
             lgd:0.5,
             balance:1000.0,
-            weight:vec![0.5, 0.5, 0.5]
+            weight:vec![0.5, 0.5, 0.5],
+            num:1.0
         };
         let u_domain:Vec<Complex<f64>>=fang_oost::get_u_domain(
             256, 0.0, 1.0
@@ -284,7 +295,8 @@ mod tests {
                 pd:0.05,
                 lgd:0.5,
                 balance:1.0,
-                weight:vec![1.0]
+                weight:vec![1.0],
+                num:1.0
             };
             discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
         }
