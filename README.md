@@ -2,8 +2,8 @@
 | :---------------: | :-----------------: |
 | ![lin-badge]      | ![cov-badge]        |
 
-[lin-badge]: https://travis-ci.org/phillyfan1138/credit_faas_demo.svg "Travis build status"
-[lin-link]:  https://travis-ci.org/phillyfan1138/credit_faas_demo "Travis build status"
+[lin-badge]: https://travis-ci.com/phillyfan1138/credit_faas_demo.svg "Travis build status"
+[lin-link]:  https://travis-ci.com/phillyfan1138/credit_faas_demo "Travis build status"
 [cov-badge]: https://codecov.io/gh/phillyfan1138/credit_faas_demo/branch/master/graph/badge.svg
 [cov-link]:  https://codecov.io/gh/phillyfan1138/credit_faas_demo
 
