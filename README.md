@@ -1,3 +1,12 @@
+| [Linux][lin-link] | [Codecov][cov-link] |
+| :---------------: | :-----------------: |
+| ![lin-badge]      | ![cov-badge]        |
+
+[lin-badge]: https://travis-ci.org/phillyfan1138/credit_faas_demo.svg "Travis build status"
+[lin-link]:  https://travis-ci.org/phillyfan1138/credit_faas_demo "Travis build status"
+[cov-badge]: https://codecov.io/gh/phillyfan1138/credit_faas_demo/branch/master/graph/badge.svg
+[cov-link]:  https://codecov.io/gh/phillyfan1138/credit_faas_demo
+
 ## Demo for Credit FaaS
 
 This project showcases how to use Fang Oosterlee's algorithm for efficiently computing portfolio statistics at a granular (loan) level.  
