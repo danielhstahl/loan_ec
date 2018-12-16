@@ -145,8 +145,6 @@ fn test_mgf(u_weights:&[Complex<f64>])->Complex<f64>{
         .sum::<Complex<f64>>().exp()
 }
 
-//keeping this since it exemplifies how much better the Gamma distribution is at generating
-//"sane" looking distributions than the Gaussian.
 #[cfg(test)]
 fn gamma_mgf(variance:f64)->impl Fn(&[Complex<f64>])->Complex<f64>{
     let kappa=1.0/variance;//average is one

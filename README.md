@@ -76,10 +76,17 @@ Note that the volatility of the underlying systemic variable for Credit Risk Plu
 
 ## Roadmap
 
+* Parsimonious integration with correlations from Risk Metrics
+* Move to Gamma factor variables
+    * The required standard deviation for factor variables would make Gaussian factors have a relatively high probability of being negative.
+    * The Vasicek assumptions require estimation not only of the drift and volatility, but also the initial values of the process.  These are nearly impossible to estimate.
+
+## Completed
+
 Goals (decreasing order of importance):
 
-* Ingest loan level parameters (balance, pd, lgd, ...etc) to create a loss characteristic function (done)
-* High memory efficiency (don't store much data in ram) (done)
+* Ingest loan level parameters (balance, pd, lgd, ...etc) to create a loss characteristic function 
+* High memory efficiency (don't store much data in ram)
 
 Success Criteria
 
