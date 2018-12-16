@@ -6,3 +6,6 @@ node_modules
 *.js
 package.json
 package-lock.json
+loan_density_aggr_lambda.json
+loan_density_gamma.json
+test_json.json

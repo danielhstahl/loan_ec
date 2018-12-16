@@ -18,6 +18,9 @@ use std::io::prelude::*; //needed for write
 use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
+#[macro_use]
+#[cfg(test)]
+extern crate approx;
 
 #[derive(Debug,Deserialize)]
 struct Loan {
@@ -52,13 +55,14 @@ struct Parameters {
     y0:Vec<f64>
 }
 
-
+//lambda needs to be made negative, the probability of lambda occurring is
+// -qX since X is negative.
 fn get_liquidity_risk_fn(
     lambda:f64,
     q:f64
 )->impl Fn(&Complex<f64>)->Complex<f64>
 {
-    move |u:&Complex<f64>|-((-u*lambda).exp()-1.0)*q-u
+    move |u:&Complex<f64>|u-((-u*lambda).exp()-1.0)*q//-u
 }
 
 struct HoldDiscreteCF {
@@ -125,6 +129,10 @@ fn get_lgd_cf_fn(
     x0:f64
 )->impl Fn(&Complex<f64>, f64)->Complex<f64>{
     move |u:&Complex<f64>, l:f64|{
+        //while "l" should be negative, note that the cir_mgf makes the "u" as negative 
+        //since its derived from the CIR model which is a discounting model.
+        //In general, implementations should make l negative when input into the 
+        //lgd_cf
         cf_functions::cir_mgf(
             &(u*l), speed, long_run_average*speed, 
             sigma, t, x0
@@ -135,6 +143,16 @@ fn get_lgd_cf_fn(
 fn test_mgf(u_weights:&[Complex<f64>])->Complex<f64>{
     u_weights.iter()
         .sum::<Complex<f64>>().exp()
+}
+
+#[cfg(test)]
+fn gamma_mgf(variance:f64)->impl Fn(&[Complex<f64>])->Complex<f64>{
+    let kappa=1.0/variance;//average is one
+    move |u_weights:&[Complex<f64>]|->Complex<f64>{
+        u_weights.iter().map(|u|{
+            -(1.0-variance*u).ln()*kappa
+        }).sum::<Complex<f64>>().exp()
+    }
 }
 
 fn main()-> Result<(), io::Error> {
@@ -174,7 +192,6 @@ fn main()-> Result<(), io::Error> {
     );
 
     let v_mgf=vasicek::get_vasicek_mgf(expectation, variance);
-
     let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
     if args.len()>3 {
         let x_domain:Vec<f64>=fang_oost::get_x_domain(1024, x_min, x_max).collect();
@@ -289,17 +306,15 @@ mod tests {
             256, x_min, x_max
         ).collect();
         let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
-        let num_loans:usize=10000;
-        for _ in 0..num_loans{
-            let loan=Loan{
-                pd:0.05,
-                lgd:0.5,
-                balance:1.0,
-                weight:vec![1.0],
-                num:1.0
-            };
-            discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
-        }
+
+        let loan=Loan{
+            pd:0.05,
+            lgd:0.5,
+            balance:1.0,
+            weight:vec![1.0],
+            num:10000.0
+        };
+        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
         let y0=vec![1.0];
         let alpha=vec![0.3];
         let sigma=vec![0.3];
@@ -334,5 +349,57 @@ mod tests {
         println!("this is es: {}", es);
         println!("this is var: {}", var);
         assert!(es>var);
+    }
+    #[test]
+    fn test_gamma_cf(){
+        let kappa=2.0;
+        let theta=0.5;
+        let u=Complex::new(0.5, 0.5);
+        let cf=gamma_mgf(theta);
+        let result=cf(&vec![u]);
+        let expected=(1.0-u*theta).powf(-kappa);
+        assert_eq!(result, expected);
+    }
+    #[test]
+    fn test_compare_expected_value(){
+        let balance=1.0;
+        let pd=0.05;
+        let lgd=0.5;
+        let num_loans=10000.0;
+        let lambda=1000.0; //loss in the event of a liquidity crisis
+        let q=0.01/(num_loans*pd*lgd*balance);
+        let expectation=-pd*lgd*balance*(1.0+lambda*q)*num_loans;
+        let x_min=(expectation-lambda)*3.0;
+        let x_max=0.0;
+        let num_u:usize=1024;
+        let mut discrete_cf=HoldDiscreteCF::new(
+            num_u, 1
+        );
+       
+        let liquid_fn=get_liquidity_risk_fn(lambda, q);
+
+        //the exponent is negative because l represents a loss
+        let lgd_fn=|u:&Complex<f64>, l:f64|(-u*l).exp();
+        
+        let u_domain:Vec<Complex<f64>>=fang_oost::get_u_domain(
+            num_u, x_min, x_max
+        ).collect();
+        let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
+        
+        let loan=Loan{
+            pd,
+            lgd,
+            balance,
+            weight:vec![1.0],
+            num:num_loans//homogenous
+        };
+        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+        let v=0.3;
+        let v_mgf=gamma_mgf(v);        
+        let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
+        assert_eq!(final_cf.len(), num_u);
+        let expectation_approx=cf_dist_utils::get_expectation_discrete_cf(x_min, x_max, &final_cf);
+        
+        assert_abs_diff_eq!(expectation_approx, expectation, epsilon=0.00001);
     }
 }

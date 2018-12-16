@@ -1,4 +1,5 @@
 #to run, use setwd([this directory])
+require(jsonlite)
 res_full=fromJSON('./loan_density_full.json')
 res_aggr=fromJSON('./loan_density_aggr.json')
 
