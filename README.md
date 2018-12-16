@@ -80,6 +80,9 @@ Note that the volatility of the underlying systemic variable for Credit Risk Plu
 * Move to Gamma factor variables
     * The required standard deviation for factor variables would make Gaussian factors have a relatively high probability of being negative.
     * The Vasicek assumptions require estimation not only of the drift and volatility, but also the initial values of the process.  These are nearly impossible to estimate.
+* Include functions for computing risk contributions 
+    * For an entire portfolio 
+    * For an incremental loan.
 
 ## Completed
 
