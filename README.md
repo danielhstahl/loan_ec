@@ -65,6 +65,15 @@ Note that these plots were generated using two different simulations and are not
 
 ![](docs/density_compare.jpg?raw=true)
 
+## Comparison with riskmetrics
+
+[Risk Metrics](https://www.msci.com/documents/10199/93396227-d449-4229-9143-24a94dab122f) is a competing method of estimating the loss distribution of a portfolio of loans.  For a simple single factor model, the following plot shows the mapping between the systemic correlation parameter (rho) for Risk Metrics and the standard deviation of the systemic variable for Credit Risk Plus (standard_deviation):
+
+![](docs/vol_corr_compare.jpg?raw=true)
+
+Note that the volatility of the underlying systemic variable for Credit Risk Plus has to be relatively large to map to the same correlation for Risk Metrics.
+
+
 ## Roadmap
 
 Goals (decreasing order of importance):
