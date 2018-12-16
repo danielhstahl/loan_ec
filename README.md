@@ -41,7 +41,7 @@ To get the expected shortfall and value at risk for granular (1 million) loans, 
 
 `./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans.json`
 
-With option density export:
+With optional density export:
 
 `./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans.json ./docs/loan_density_full.json`
 
@@ -54,7 +54,7 @@ To run the demo for this recommended implementation,
 
 `./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans_grouped.json`
 
-With option density export:
+With optional density export:
 
 `./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans_grouped.json ./docs/loan_density_aggr.json`
 
