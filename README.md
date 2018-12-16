@@ -65,7 +65,7 @@ Note that these plots were generated using two different simulations and are not
 
 ![](docs/density_compare.jpg?raw=true)
 
-## Comparison with riskmetrics
+## Comparison with Risk Metrics
 
 [Risk Metrics](https://www.msci.com/documents/10199/93396227-d449-4229-9143-24a94dab122f) is a competing method of estimating the loss distribution of a portfolio of loans.  For a simple single factor model, the following plot shows the mapping between the systemic correlation parameter (rho) for Risk Metrics and the standard deviation of the systemic variable for Credit Risk Plus (standard_deviation):
 
@@ -73,6 +73,19 @@ Note that these plots were generated using two different simulations and are not
 
 Note that the volatility of the underlying systemic variable for Credit Risk Plus has to be relatively large to map to the same correlation for Risk Metrics.
 
+## Converting Risk Metrics correlation and R squared matrix to Credit Risk Plus
+
+Risk Metrics requires a correlation matrix for different industries.  Within each industry, an "R-squared" measures the amount of correlation between (fully diversified) obligors in the industry.  One way to map this matrix and R-squared vector is as follows:
+* Convert the R-squared to a standard deviation for a gamma random variable for each industry
+* Take the entries of the correlation matrix and convert these to weights for the other industry random variables for a given obligor
+
+As an example, consider the correlation from the Risk Metrics technical document:
+
+1.0   .16   .08
+.16   1.0   .34
+.08   .34   1.0
+
+The weight vector for an obligor in  industry 1 would be [.76, .16, .08].  The weight vector for an obligor in  industry 2 would be [.16, .5, .34].  The weight vector for an obligor in  industry 3 would be [.08, .34, .58].  
 
 ## Roadmap
 
