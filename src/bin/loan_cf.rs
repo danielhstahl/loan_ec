@@ -149,10 +149,10 @@ fn test_mgf(u_weights:&[Complex<f64>])->Complex<f64>{
 //"sane" looking distributions than the Gaussian.
 #[cfg(test)]
 fn gamma_mgf(variance:f64)->impl Fn(&[Complex<f64>])->Complex<f64>{
-    let theta=1.0/variance;//average is one
+    let kappa=1.0/variance;//average is one
     move |u_weights:&[Complex<f64>]|->Complex<f64>{
         u_weights.iter().map(|u|{
-            -(1.0-theta*u).ln()*variance
+            -(1.0-variance*u).ln()*kappa
         }).sum::<Complex<f64>>().exp()
     }
 }
@@ -354,37 +354,40 @@ mod tests {
     }
     #[test]
     fn test_gamma_cf(){
-        let kappa=0.5;
-        let theta=2.0;
+        let kappa=2.0;
+        let theta=0.5;
         let u=Complex::new(0.5, 0.5);
-        let cf=gamma_mgf(kappa);
+        let cf=gamma_mgf(theta);
         let result=cf(&vec![u]);
         let expected=(1.0-u*theta).powf(-kappa);
         assert_eq!(result, expected);
     }
     #[test]
     fn test_compare_expected_value(){
-        let x_min=-6000.0;
+        let balance=1.0;
+        let pd=0.05;
+        let lgd=0.5;
+        let num_loans=10000.0;
+        let lambda=1000.0; //loss in the event of a liquidity crisis
+        let q=0.01/(num_loans*pd*lgd*balance);
+        let expectation=-pd*lgd*balance*(1.0+lambda*q)*num_loans;
+        let x_min=(expectation-lambda)*3.0;
         let x_max=0.0;
-        let num_u:usize=256;
+        let num_u:usize=1024;
         let mut discrete_cf=HoldDiscreteCF::new(
             num_u, 1
         );
-        let lambda=1000.0; //loss in the event of a liquidity crisis
-        let q=0.0001;
+       
         let liquid_fn=get_liquidity_risk_fn(lambda, q);
 
-        //the exponent is negative because l is negative (represents a loss), not because u is negative
+        //the exponent is negative because l represents a loss
         let lgd_fn=|u:&Complex<f64>, l:f64|(-u*l).exp();
-        let pd=0.05;
-        let lgd=0.5;
-        let balance=1.0; //for some reason, this is impacting the final result oddly
+        
         let u_domain:Vec<Complex<f64>>=fang_oost::get_u_domain(
             num_u, x_min, x_max
         ).collect();
         let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
-        let num_loans=10000.0;
-
+        
         let loan=Loan{
             pd,
             lgd,
@@ -393,26 +396,12 @@ mod tests {
             num:num_loans//homogenous
         };
         discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
-        let v=0.4;
-        let v_mgf=gamma_mgf(v);
-        
+        let v=0.3;
+        let v_mgf=gamma_mgf(v);        
         let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
-
-        assert_eq!(final_cf.len(), 256);
-        
+        assert_eq!(final_cf.len(), num_u);
         let expectation_approx=cf_dist_utils::get_expectation_discrete_cf(x_min, x_max, &final_cf);
-
-        let x_domain:Vec<f64>=fang_oost::get_x_domain(1024, x_min, x_max).collect();
-        let density:Vec<f64>=fang_oost::get_density(
-            x_min, x_max, 
-            fang_oost::get_x_domain(1024, x_min, x_max), 
-            &final_cf
-        ).collect();
-        let json_results=json!({"x":x_domain, "density":density});
-        let mut file_w = File::create("./docs/test_json.json").unwrap();
-        file_w.write_all(json_results.to_string().as_bytes()).unwrap();
-
-        let expectation=-pd*lgd*balance*(1.0+lambda*q)*num_loans;
+        
         assert_abs_diff_eq!(expectation_approx, expectation, epsilon=0.00001);
     }
 }
