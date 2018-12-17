@@ -81,11 +81,9 @@ Risk Metrics requires a correlation matrix for different industries.  Within eac
 
 As an example, consider the correlation from the Risk Metrics technical document:
 
-1.0   .16   .08
-.16   1.0   .34
-.08   .34   1.0
+[1.0, .16, .08; .16, 1.0, .34; .08, .34, 1.0]
 
-The weight vector for an obligor in  industry 1 would be [.76, .16, .08].  The weight vector for an obligor in  industry 2 would be [.16, .5, .34].  The weight vector for an obligor in  industry 3 would be [.08, .34, .58].  
+The weight vector for an obligor in  industry 1 would be [.806, .129, .065].  The weight vector for an obligor in  industry 2 would be [.107, .666, .227].  The weight vector for an obligor in  industry 3 would be [.056, .240, .704].  
 
 ## Roadmap
 
