@@ -155,6 +155,87 @@ fn gamma_mgf(variance:f64)->impl Fn(&[Complex<f64>])->Complex<f64>{
     }
 }
 
+fn variance_liquidity(
+    lambda:f64,
+    q:f64,
+    variance:f64,
+    expectation:f64
+)->f64{
+    variance*(1.0+q*lambda).powi(2)+expectation*q*lambda.powi(2)
+}
+fn expectation_liquidity(
+    lambda:f64,
+    q:f64,
+    expectation:f64
+)->f64{
+    expectation*(1.0+q*lambda)
+}
+
+fn variance_from_gamma(weights:&[f64], variances:&[f64])->f64{
+    weights.iter().zip(variances).map(|(w, v){
+        v*w.powi(2)
+    }).sum()
+}
+
+fn generic_risk_contribution(
+    pd:f64,
+    expectation_l:f64,
+    variance_l:f64,
+    expectation_portfolio:f64,
+    variance_portfolio:f64,
+    variance_loan:f64,
+    c:f64,
+    rj:f64,
+    balance:f64,
+    lambda_0:f64,
+    lambda:f64,
+    q:f64
+)->f64{
+    let variance_liq=variance_liquidity(
+        lambda, q, variance_portfolio, 
+        expectation_portfolio
+    );
+    let coef=c/variance_liq.sqrt();
+    pd*expectation_l*(1.0+q*lambda_0)+
+        rj*balance*q*expectation_portfolio+
+        coef*(
+            pd*expectation_l*q*lambda_0.powi(2)+
+            rj*balance*(lambda_0+lambda)*q*expectation_portfolio
+        )+
+        coef*(
+            pd*expectation_l*variance_loan-
+            pd*(variance_l+expectation_l.pow(2))
+        )*(1.0+q*lambda_0).powi(2)+
+        coef*(
+            2.0*rj*balance*q*variance_portfolio+
+            rj*balance*q.powi(2)*variance_portfolio*(lambda+lambda_0)
+        )
+}
+fn scale_contributions(
+    risk_measure:f64,
+    expectation_liquid:f64,
+    variance_liquid:f64
+)->f64{
+    (risk_measure-expectation_liquid)/variance_liquid
+}
+/*
+fn risk_contribution_existing_loan(
+    loan:&Loan, gamma_variances:&[f64], risk_measure:f64,
+    variance_l:f64,
+    expectation_portfolio:f64, 
+    variance_portfolio:f64
+)->f64{
+    generic_risk_contribution(
+        loan.pd, loan.lgd*loan.balance, 
+        variance_l, expectation_portfolio, 
+        variance_portfolio, 
+        variance_from_gamma(&loan.weight, gamma_variances),
+        scale_contributions(
+            risk_measure, 
+        )
+    )
+}*/
+
 fn main()-> Result<(), io::Error> {
     let args: Vec<String> = std::env::args().collect();
     let Parameters{
@@ -215,6 +296,12 @@ fn main()-> Result<(), io::Error> {
         max_iterations,
         tolerance,
         &final_cf
+    );
+    let variance_portfolio=cf_dist_utils::get_variance_discrete_cf(
+        x_min, x_max, &final_cf
+    );
+    let expectation_portfolio=cf_dist_utils::get_expectation_discrete_cf(
+        x_min, x_max, &final_cf
     );
     println!("This is ES: {}", es);
     println!("This is VaR: {}", var);
