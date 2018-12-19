@@ -217,6 +217,33 @@ pub fn portfolio_variance(
     }).sum::<f64>();
     vel+evl
 }
+#[cfg(test)]
+pub fn portfolio_variance_from_cf(
+    pd:&[f64],
+    expectation_l:&[f64], //lgd
+    variance_l:&[f64],
+    balance:&[f64],
+    weights:&[Vec<f64>], //n by m
+    variance_systemic:&[f64] //length m, assumed independent since a vector
+)->f64{
+
+    let vel=izip!(
+        pd, balance,
+        expectation_l,
+        variance_l
+    ).map(|(p, b, e_l, vl)|{
+        p*b.powi(2)*(vl+e_l.powi(2))
+    }).sum::<f64>();
+    
+    let el=portfolio_expectation(pd, expectation_l, balance);
+
+    let evl=variance_systemic.iter().enumerate().map(|(index, v)|{
+        izip!(pd, expectation_l, weights, balance).map(|(p, e_l, w,b)|{
+            p*e_l*b*w[index]
+        }).sum::<f64>().powi(2)*(v+1.0)
+    }).sum::<f64>();
+    vel+evl-el.powi(2)
+}
 
 
 fn risk_contribution_existing_loan(
@@ -523,6 +550,7 @@ mod tests {
         let v_mgf=gamma_mgf(v1); 
         let weight1=vec![0.4, 0.6];
         let weight2=vec![0.4, 0.6];
+        let weight3=vec![0.4, 0.6];
         let variance=portfolio_variance(
             &vec![pd; num_loans as usize],
             &vec![lgd; num_loans as usize],
@@ -531,12 +559,26 @@ mod tests {
             &vec![weight1; num_loans as usize],
             &v2
         );
+        let variance_cf=portfolio_variance_from_cf(
+            &vec![pd; num_loans as usize],
+            &vec![lgd; num_loans as usize],
+            &vec![lgd_variance; num_loans as usize],
+            &vec![balance; num_loans as usize],
+            &vec![weight2; num_loans as usize],
+            &v2
+        );
+
+        println!("norma variance: {}", variance);
+        println!("cf variance: {}", variance_cf);
 
         let expectation_liquid=risk_contributions::expectation_liquidity(
             lambda, q, expectation
         );
         let variance_liquid=risk_contributions::variance_liquidity(
             lambda, q, expectation, variance
+        );
+        let variance_liquid_cf=risk_contributions::variance_liquidity(
+            lambda, q, expectation, variance_cf
         );
 
         let x_min=(expectation-lambda)*3.0;
@@ -563,7 +605,7 @@ mod tests {
             pd,
             lgd,
             balance,
-            weight:weight2,
+            weight:weight3,
             num:num_loans//homogenous
         };
         discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
@@ -580,5 +622,6 @@ mod tests {
         assert_abs_diff_eq!(expectation_approx, expectation_liquid, epsilon=0.00001);
         //this seems to be awfully large variation.  Is it a problem with the approximation or the variance computation?
         assert_abs_diff_eq!((variance_approx-variance_liquid)/variance_liquid, 0.0, epsilon=0.01);
+        assert_abs_diff_eq!(variance_approx, variance_liquid_cf, epsilon=0.01);
     }
 }
