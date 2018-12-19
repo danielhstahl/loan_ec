@@ -6,6 +6,7 @@ extern crate rand;
 extern crate utils;
 use utils::vec_to_mat;
 use utils::vasicek;
+use utils::risk_contributions;
 extern crate cf_dist_utils;
 use self::num_complex::Complex;
 use self::rayon::prelude::*;
@@ -21,7 +22,9 @@ use std::fs::File;
 #[macro_use]
 #[cfg(test)]
 extern crate approx;
-
+#[macro_use]
+#[cfg(test)]
+extern crate itertools;
 #[derive(Debug,Deserialize)]
 struct Loan {
     balance:f64,
@@ -102,6 +105,27 @@ impl HoldDiscreteCF {
             *elem+=vec_of_cf_u[col_num]*loan.weight[row_num]*loan.num;
         });
     }
+    pub fn experiment_loan<U>(
+        &self, loan: &Loan, 
+        u_domain: &[Complex<f64>],
+        log_lpm_cf: U
+    )->Vec<Complex<f64>> where U: Fn(&Complex<f64>, &Loan)->Complex<f64>+std::marker::Sync+std::marker::Send
+    {
+        let vec_of_cf_u:Vec<Complex<f64>>=u_domain
+            .par_iter()
+            .map(|u|{
+                log_lpm_cf(
+                    &u, 
+                    loan
+                )
+            }).collect(); 
+        let num_w=self.num_w;
+        self.cf.par_iter().enumerate().map(|(index, elem)|{
+            let row_num=vec_to_mat::get_row_from_index(index, num_w);
+            let col_num=vec_to_mat::get_col_from_index(index, num_w);
+            elem+vec_of_cf_u[col_num]*loan.weight[row_num]*loan.num
+        }).collect::<Vec<_>>()
+    }
     pub fn get_full_cf<U>(&self, mgf:U)->Vec<Complex<f64>>
     where U: Fn(&[Complex<f64>])->Complex<f64>+std::marker::Sync+std::marker::Send
     {
@@ -145,96 +169,85 @@ fn test_mgf(u_weights:&[Complex<f64>])->Complex<f64>{
         .sum::<Complex<f64>>().exp()
 }
 
-#[cfg(test)]
-fn gamma_mgf(variance:f64)->impl Fn(&[Complex<f64>])->Complex<f64>{
-    let kappa=1.0/variance;//average is one
+fn gamma_mgf(variance:Vec<f64>)->
+   impl Fn(&[Complex<f64>])->Complex<f64>
+{
     move |u_weights:&[Complex<f64>]|->Complex<f64>{
-        u_weights.iter().map(|u|{
-            -(1.0-variance*u).ln()*kappa
+        u_weights.iter().zip(&variance).map(|(u, v)|{
+            -(1.0-v*u).ln()/v
         }).sum::<Complex<f64>>().exp()
     }
 }
 
-fn variance_liquidity(
-    lambda:f64,
-    q:f64,
-    variance:f64,
-    expectation:f64
+//inefficient for large portfolios.  dont use
+#[cfg(test)]
+pub fn portfolio_expectation(
+    pd:&[f64],
+    expectation_l:&[f64],
+    balance:&[f64]
 )->f64{
-    variance*(1.0+q*lambda).powi(2)+expectation*q*lambda.powi(2)
-}
-fn expectation_liquidity(
-    lambda:f64,
-    q:f64,
-    expectation:f64
-)->f64{
-    expectation*(1.0+q*lambda)
+    izip!(pd, expectation_l, balance)
+        .map(|(p, el, b)|{
+            p*el*b
+        }).sum()
 }
 
-fn variance_from_gamma(weights:&[f64], variances:&[f64])->f64{
-    weights.iter().zip(variances).map(|(w, v){
-        v*w.powi(2)
-    }).sum()
+//inefficient for large portfolios.  dont use
+#[cfg(test)]
+pub fn portfolio_variance(
+    pd:&[f64],
+    expectation_l:&[f64], //lgd
+    variance_l:&[f64],
+    balance:&[f64],
+    weights:&[Vec<f64>], //n by m
+    variance_systemic:&[f64] //length m, assumed independent since a vector
+)->f64{
+
+    let vel=izip!(
+        pd, balance,
+        variance_l
+    ).map(|(p, b, vl)|{
+        p*b.powi(2)*vl
+    }).sum::<f64>();
+    
+    let evl=variance_systemic.iter().enumerate().map(|(index, v)|{
+        izip!(pd, expectation_l, weights, balance).map(|(p, el, w,b)|{
+            p*el*b*w[index]
+        }).sum::<f64>().powi(2)*v
+    }).sum::<f64>();
+    vel+evl
 }
 
-fn generic_risk_contribution(
-    pd:f64,
-    expectation_l:f64,
-    variance_l:f64,
-    expectation_portfolio:f64,
-    variance_portfolio:f64,
-    variance_loan:f64,
-    c:f64,
-    rj:f64,
-    balance:f64,
-    lambda_0:f64,
-    lambda:f64,
-    q:f64
-)->f64{
-    let variance_liq=variance_liquidity(
-        lambda, q, variance_portfolio, 
-        expectation_portfolio
-    );
-    let coef=c/variance_liq.sqrt();
-    pd*expectation_l*(1.0+q*lambda_0)+
-        rj*balance*q*expectation_portfolio+
-        coef*(
-            pd*expectation_l*q*lambda_0.powi(2)+
-            rj*balance*(lambda_0+lambda)*q*expectation_portfolio
-        )+
-        coef*(
-            pd*expectation_l*variance_loan-
-            pd*(variance_l+expectation_l.pow(2))
-        )*(1.0+q*lambda_0).powi(2)+
-        coef*(
-            2.0*rj*balance*q*variance_portfolio+
-            rj*balance*q.powi(2)*variance_portfolio*(lambda+lambda_0)
-        )
-}
-fn scale_contributions(
-    risk_measure:f64,
-    expectation_liquid:f64,
-    variance_liquid:f64
-)->f64{
-    (risk_measure-expectation_liquid)/variance_liquid
-}
-/*
+
 fn risk_contribution_existing_loan(
     loan:&Loan, gamma_variances:&[f64], risk_measure:f64,
     variance_l:f64,
     expectation_portfolio:f64, 
-    variance_portfolio:f64
+    variance_portfolio:f64,
+    lambda:f64, q:f64
 )->f64{
-    generic_risk_contribution(
+    let expectation_liquid=risk_contributions::expectation_liquidity(
+        lambda, q, expectation_portfolio
+    );
+    let variance_liquid=risk_contributions::variance_liquidity(
+        lambda, q, expectation_portfolio, variance_portfolio
+    );
+    let rj=0.0;
+    risk_contributions::generic_risk_contribution(
         loan.pd, loan.lgd*loan.balance, 
         variance_l, expectation_portfolio, 
         variance_portfolio, 
-        variance_from_gamma(&loan.weight, gamma_variances),
-        scale_contributions(
-            risk_measure, 
-        )
+        risk_contributions::variance_from_independence(&loan.weight, gamma_variances),
+        risk_contributions::scale_contributions(
+            risk_measure, expectation_liquid, variance_liquid
+        ),
+        rj,
+        loan.balance,
+        lambda, 
+        lambda,
+        q
     )
-}*/
+}
 
 fn main()-> Result<(), io::Error> {
     let args: Vec<String> = std::env::args().collect();
@@ -440,9 +453,10 @@ mod tests {
     #[test]
     fn test_gamma_cf(){
         let kappa=2.0;
-        let theta=0.5;
+        //let theta=0.5;
         let u=Complex::new(0.5, 0.5);
-        let cf=gamma_mgf(theta);
+        let theta=0.5;
+        let cf=gamma_mgf(vec![theta]);
         let result=cf(&vec![u]);
         let expected=(1.0-u*theta).powf(-kappa);
         assert_eq!(result, expected);
@@ -481,12 +495,90 @@ mod tests {
             num:num_loans//homogenous
         };
         discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
-        let v=0.3;
+        let v=vec![0.3];
         let v_mgf=gamma_mgf(v);        
         let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
         assert_eq!(final_cf.len(), num_u);
         let expectation_approx=cf_dist_utils::get_expectation_discrete_cf(x_min, x_max, &final_cf);
         
         assert_abs_diff_eq!(expectation_approx, expectation, epsilon=0.00001);
+    }
+    #[test]
+    fn test_compare_expected_value_and_variance(){
+        let balance=1.0;
+        let pd=0.05;
+        let lgd=0.5;
+        let num_loans=10000.0;
+        let lambda=1000.0; //loss in the event of a liquidity crisis
+        let q=0.01/(num_loans*pd*lgd*balance);
+        let expectation=-portfolio_expectation(
+            &vec![pd; num_loans as usize],
+            &vec![lgd; num_loans as usize],
+            &vec![balance; num_loans as usize]
+        );
+        let lgd_variance=0.2;
+        let v1=vec![0.4, 0.3];
+        let v2=vec![0.4, 0.3];
+
+        let v_mgf=gamma_mgf(v1); 
+        let weight1=vec![0.4, 0.6];
+        let weight2=vec![0.4, 0.6];
+        let variance=portfolio_variance(
+            &vec![pd; num_loans as usize],
+            &vec![lgd; num_loans as usize],
+            &vec![lgd_variance; num_loans as usize],
+            &vec![balance; num_loans as usize],
+            &vec![weight1; num_loans as usize],
+            &v2
+        );
+
+        let expectation_liquid=risk_contributions::expectation_liquidity(
+            lambda, q, expectation
+        );
+        let variance_liquid=risk_contributions::variance_liquidity(
+            lambda, q, expectation, variance
+        );
+
+        let x_min=(expectation-lambda)*3.0;
+        let x_max=0.0;
+        let num_u:usize=1024;
+        let mut discrete_cf=HoldDiscreteCF::new(
+            num_u, v2.len()
+        );
+       
+        let liquid_fn=get_liquidity_risk_fn(lambda, q);
+
+        //the exponent is negative because l represents a loss
+        let a=1.0/lgd_variance;
+        let lgd_fn=|u:&Complex<f64>, l:f64|cf_functions::gamma_cf(
+            &(-u*l), a, lgd_variance
+        );
+        
+        let u_domain:Vec<Complex<f64>>=fang_oost::get_u_domain(
+            num_u, x_min, x_max
+        ).collect();
+        let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
+        
+        let loan=Loan{
+            pd,
+            lgd,
+            balance,
+            weight:weight2,
+            num:num_loans//homogenous
+        };
+        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+           
+        let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
+        assert_eq!(final_cf.len(), num_u);
+        let expectation_approx=cf_dist_utils::get_expectation_discrete_cf(
+            x_min, x_max, &final_cf
+        );
+        let variance_approx=cf_dist_utils::get_variance_discrete_cf(
+            x_min, x_max, &final_cf
+        );
+        
+        assert_abs_diff_eq!(expectation_approx, expectation_liquid, epsilon=0.00001);
+        //this seems to be awfully large variation.  Is it a problem with the approximation or the variance computation?
+        assert_abs_diff_eq!((variance_approx-variance_liquid)/variance_liquid, 0.0, epsilon=0.01);
     }
 }
