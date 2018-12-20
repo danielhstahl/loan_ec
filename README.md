@@ -85,6 +85,13 @@ As an example, consider the correlation from the Risk Metrics technical document
 
 The weight vector for an obligor in  industry 1 would be [.806, .129, .065].  The weight vector for an obligor in  industry 2 would be [.107, .666, .227].  The weight vector for an obligor in  industry 3 would be [.056, .240, .704].  
 
+## Immediate next steps
+
+* Move towards gamma distribution (rather than Gaussian)
+    * Requires changing input parameters
+* Add risk contributions
+    * Try to make independent from the loan_ec library
+
 ## Roadmap
 
 * Parsimonious integration with correlations from Risk Metrics

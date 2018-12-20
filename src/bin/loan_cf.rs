@@ -88,9 +88,16 @@ fn main()-> Result<(), io::Error> {
     }= serde_json::from_str(args[1].as_str())?;
     let num_w=alpha.len();
     let liquid_fn=loan_ec::get_liquidity_risk_fn(lambda, q);
-    let lgd_fn=|u:&Complex<f64>, l:f64, lgd_v:f64|cf_functions::gamma_cf(
-        &(-u*l), 1.0/lgd_v, lgd_v
-    );
+    let lgd_fn=|u:&Complex<f64>, l:f64, lgd_v:f64|{
+        if lgd_v>0.0{
+            cf_functions::gamma_cf(
+                &(-u*l), 1.0/lgd_v, lgd_v
+            )
+        }
+        else{
+            (-u*l).exp()
+        }
+    };
     let log_lpm_cf=loan_ec::get_log_lpm_cf(&lgd_fn, &liquid_fn);
 
     let mut discrete_cf=loan_ec::HoldDiscreteCF::new(
