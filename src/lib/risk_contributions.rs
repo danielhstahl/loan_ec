@@ -1,3 +1,4 @@
+//TODO!!! most of these should be in loan_ec.rs
 pub fn variance_liquidity(
     lambda:f64,
     q:f64,
