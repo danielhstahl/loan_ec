@@ -70,13 +70,47 @@ fn get_liquidity_risk_fn(
 
 struct HoldDiscreteCF {
     cf: Vec<Complex<f64> >,
+    el_vec: Vec<f64>, //size num_w
+    var_vec: Vec<f64>, //size num_w
     num_w: usize //num columns
+}
+
+fn portfolio_expectation(
+    el_vec:&[f64],
+    el_sys:&[f64]
+)->f64{
+    el_vec.iter().zip(el_sys)
+        .map(|(el_v, el_s)|{
+            el_v*el_s
+        }).sum()
+}
+//the assumption here is that the var_sys are independent...else instead
+//of vectors we need a matrix
+fn portfolio_variance(
+    el_vec:&[f64],
+    el_sys:&[f64],
+    var_vec:&[f64],
+    var_sys:&[f64]
+)->f64{
+    let v_p:f64=var_vec.iter()
+        .zip(el_sys)
+        .map(|(var_v, el_s)|{
+            el_s*var_v
+        }).sum();
+    let e_p:f64=el_vec.iter()
+        .zip(var_sys)
+        .map(|(el_v, var_s)|{
+            el_v.powi(2)*var_s
+        }).sum();
+    v_p+e_p
 }
 
 impl HoldDiscreteCF {
     pub fn new(num_u: usize, num_w: usize) -> HoldDiscreteCF{
         HoldDiscreteCF{
             cf: vec![Complex::new(0.0, 0.0); num_u*num_w],
+            el_vec:vec![0.0; num_w],
+            var_vec:vec![0.0; num_w], //not true varaince, instead the p_j E[l^2]w_j
             num_w //num rows
         }
     }
@@ -84,11 +118,15 @@ impl HoldDiscreteCF {
     pub fn get_cf(&self)->&Vec<Complex<f64>>{
         return &self.cf
     }
-    pub fn process_loan<U>(
+    pub fn process_loan<U, V, T>(
         &mut self, loan: &Loan, 
         u_domain: &[Complex<f64>],
+        get_el_from_loan: V,
+        get_var_from_loan: T,
         log_lpm_cf: U
-    ) where U: Fn(&Complex<f64>, &Loan)->Complex<f64>+std::marker::Sync+std::marker::Send
+    ) where U: Fn(&Complex<f64>, &Loan)->Complex<f64>+std::marker::Sync+std::marker::Send,
+            V: Fn(&Loan, f64)->f64+std::marker::Sync+std::marker::Send,
+            T: Fn(&Loan, f64)->f64+std::marker::Sync+std::marker::Send
     {
         let vec_of_cf_u:Vec<Complex<f64>>=u_domain
             .par_iter()
@@ -104,12 +142,23 @@ impl HoldDiscreteCF {
             let col_num=vec_to_mat::get_col_from_index(index, num_w);
             *elem+=vec_of_cf_u[col_num]*loan.weight[row_num]*loan.num;
         });
+        self.el_vec.iter_mut().zip(&loan.weight).for_each(|(el, &w)|{
+            *el+=get_el_from_loan(&loan, w);
+        });
+        self.var_vec.iter_mut().zip(&loan.weight).for_each(|(var, &w)|{
+            *var+=get_var_from_loan(&loan, w);
+        });
     }
-    pub fn experiment_loan<U>(
+    pub fn experiment_loan<U, T, V>(
         &self, loan: &Loan, 
         u_domain: &[Complex<f64>],
+        get_el_from_loan: V,
+        get_var_from_loan: T,
         log_lpm_cf: U
-    )->Vec<Complex<f64>> where U: Fn(&Complex<f64>, &Loan)->Complex<f64>+std::marker::Sync+std::marker::Send
+    )->(Vec<Complex<f64>>, Vec<f64>, Vec<f64>) where 
+        U: Fn(&Complex<f64>, &Loan)->Complex<f64>+std::marker::Sync+std::marker::Send,
+        V: Fn(&Loan, f64)->f64+std::marker::Sync+std::marker::Send,
+        T: Fn(&Loan, f64)->f64+std::marker::Sync+std::marker::Send
     {
         let vec_of_cf_u:Vec<Complex<f64>>=u_domain
             .par_iter()
@@ -120,11 +169,25 @@ impl HoldDiscreteCF {
                 )
             }).collect(); 
         let num_w=self.num_w;
-        self.cf.par_iter().enumerate().map(|(index, elem)|{
-            let row_num=vec_to_mat::get_row_from_index(index, num_w);
-            let col_num=vec_to_mat::get_col_from_index(index, num_w);
-            elem+vec_of_cf_u[col_num]*loan.weight[row_num]*loan.num
-        }).collect::<Vec<_>>()
+        (
+            self.cf.par_iter().enumerate().map(|(index, elem)|{
+                let row_num=vec_to_mat::get_row_from_index(index, num_w);
+                let col_num=vec_to_mat::get_col_from_index(index, num_w);
+                elem+vec_of_cf_u[col_num]*loan.weight[row_num]*loan.num
+            }).collect::<Vec<_>>(),
+            self.el_vec.iter().zip(&loan.weight).map(|(el, &w)|{
+                el+get_el_from_loan(&loan, w)
+            }).collect::<Vec<_>>(),
+            self.var_vec.iter().zip(&loan.weight).map(|(var, &w)|{
+                var+get_var_from_loan(&loan, w)
+            }).collect::<Vec<_>>()
+        )
+    }
+    pub fn get_portfolio_expectation(&self, expectation_systemic:&[f64])->f64{
+        portfolio_expectation(&self.el_vec, expectation_systemic)
+    }
+    pub fn get_portfolio_variance(&self, expectation_systemic:&[f64], variance_systemic:&[f64])->f64{
+        portfolio_variance(&self.el_vec, expectation_systemic, &self.var_vec, variance_systemic)
     }
     pub fn get_full_cf<U>(&self, mgf:U)->Vec<Complex<f64>>
     where U: Fn(&[Complex<f64>])->Complex<f64>+std::marker::Sync+std::marker::Send
@@ -179,6 +242,8 @@ fn gamma_mgf(variance:Vec<f64>)->
     }
 }
 
+
+/*
 //inefficient for large portfolios.  dont use
 #[cfg(test)]
 pub fn portfolio_expectation(
@@ -217,7 +282,7 @@ pub fn portfolio_variance(
         }).sum::<f64>().powi(2)*v
     }).sum::<f64>();
     vel+evl
-}
+}*/
 
 
 
@@ -272,11 +337,19 @@ fn main()-> Result<(), io::Error> {
         num_u, x_min, x_max
     ).collect();
 
+    let get_el_from_loan=|loan:&Loan, w:f64|{
+        loan.lgd*loan.balance*w*loan.pd
+    };
+    //this isnt the actual variance, but is a placeholder to compile
+    let get_var_from_loan=|loan:&Loan, w:f64|{
+        (loan.lgd*loan.balance).powi(2)*w*loan.pd
+    };
+
     let f = File::open(args[2].as_str())?;
     let file = BufReader::new(&f);
     for line in file.lines() {
         let loan: Loan = serde_json::from_str(&line?)?;
-        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+        discrete_cf.process_loan(&loan, &u_domain, &get_el_from_loan, &get_var_from_loan, &log_lpm_cf);
     }  
     
     let expectation=vasicek::compute_integral_expectation_long_run_one(
@@ -354,7 +427,14 @@ mod tests {
         let u_domain:Vec<Complex<f64>>=fang_oost::get_u_domain(
             256, 0.0, 1.0
         ).collect();
-        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+        let get_el_from_loan=|loan:&Loan, w:f64|{
+            loan.lgd*loan.balance*w*loan.pd
+        };
+        //this isnt the actual variance, but is a placeholder to compile
+        let get_var_from_loan=|loan:&Loan, w:f64|{
+            (loan.lgd*loan.balance).powi(2)*w*loan.pd
+        };
+        discrete_cf.process_loan(&loan, &u_domain, &get_el_from_loan, &get_var_from_loan, &log_lpm_cf);
         let cf=discrete_cf.get_cf();
         assert_eq!(cf.len(), 256*3);
         cf.iter().for_each(|cf_el|{
@@ -380,7 +460,14 @@ mod tests {
         let log_lpm_cf=|_u:&Complex<f64>, _loan:&Loan|{
             Complex::new(1.0, 0.0)
         };
-        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+        let get_el_from_loan=|loan:&Loan, w:f64|{
+            loan.lgd*loan.balance*w*loan.pd
+        };
+        //this isnt the actual variance, but is a placeholder to compile
+        let get_var_from_loan=|loan:&Loan, w:f64|{
+            (loan.lgd*loan.balance).powi(2)*w*loan.pd
+        };
+        discrete_cf.process_loan(&loan, &u_domain, &get_el_from_loan, &get_var_from_loan, &log_lpm_cf);
         let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&test_mgf);
     
         assert_eq!(final_cf.len(), 256);
@@ -416,7 +503,14 @@ mod tests {
             weight:vec![1.0],
             num:10000.0
         };
-        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+        let get_el_from_loan=|loan:&Loan, w:f64|{
+            loan.lgd*loan.balance*w*loan.pd
+        };
+        //this isnt the actual variance, but is a placeholder to compile
+        let get_var_from_loan=|loan:&Loan, w:f64|{
+            (loan.lgd*loan.balance).powi(2)*w*loan.pd
+        };
+        discrete_cf.process_loan(&loan, &u_domain, &get_el_from_loan, &get_var_from_loan, &log_lpm_cf);
         let y0=vec![1.0];
         let alpha=vec![0.3];
         let sigma=vec![0.3];
@@ -496,7 +590,15 @@ mod tests {
             weight:vec![1.0],
             num:num_loans//homogenous
         };
-        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+
+        let get_el_from_loan=|loan:&Loan, w:f64|{
+            -loan.lgd*loan.balance*w*loan.pd*loan.num
+        };
+        let get_var_from_loan=|loan:&Loan, w:f64|{
+            (loan.lgd*loan.balance).powi(2)*w*loan.pd*loan.num
+        };
+
+        discrete_cf.process_loan(&loan, &u_domain, &get_el_from_loan, &get_var_from_loan, &log_lpm_cf);
         let v=vec![0.3];
         let v_mgf=gamma_mgf(v);        
         let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
@@ -504,6 +606,12 @@ mod tests {
         let expectation_approx=cf_dist_utils::get_expectation_discrete_cf(x_min, x_max, &final_cf);
         
         assert_abs_diff_eq!(expectation_approx, expectation, epsilon=0.00001);
+        assert_abs_diff_eq!(
+            risk_contributions::expectation_liquidity(
+                lambda, q,
+                discrete_cf.get_portfolio_expectation(&vec![1.0])
+            ), expectation, epsilon=0.00001
+        );
     }
     #[test]
     fn test_compare_expected_value_and_variance_no_stochastic_lgd(){
@@ -513,38 +621,23 @@ mod tests {
         let num_loans=10000.0;
         let lambda=1000.0; //loss in the event of a liquidity crisis
         let q=0.01/(num_loans*pd*lgd*balance);
-        let expectation=-portfolio_expectation(
-            &vec![pd; num_loans as usize],
-            &vec![lgd; num_loans as usize],
-            &vec![balance; num_loans as usize]
-        );
-        let lgd_variance=0.0;
+        let x_min=(-num_loans*pd*lgd*balance-lambda)*3.0;
+
         let v1=vec![0.4, 0.3];
         let v2=vec![0.4, 0.3];
-
+        let systemic_expectation=vec![1.0, 1.0];
         let v_mgf=gamma_mgf(v1); 
 
-        let weight1=vec![0.4, 0.6];
-        let weight2=vec![0.4, 0.6];
-        let weight3=vec![0.4, 0.6];
-        let variance=portfolio_variance(
-            &vec![pd; num_loans as usize],
-            &vec![lgd; num_loans as usize],
-            &vec![lgd_variance; num_loans as usize],
-            &vec![balance; num_loans as usize],
-            &vec![weight1; num_loans as usize],
-            &v2
-        );
+        let weight=vec![0.4, 0.6];
 
+        let get_el_from_loan=|loan:&Loan, w:f64|{
+            -loan.lgd*loan.balance*w*loan.pd*loan.num
+        };
+        let get_var_from_loan=|loan:&Loan, w:f64|{
+            (loan.lgd*loan.balance).powi(2)*w*loan.pd*loan.num
+        };
+        
 
-        let expectation_liquid=risk_contributions::expectation_liquidity(
-            lambda, q, expectation
-        );
-        let variance_liquid=risk_contributions::variance_liquidity(
-            lambda, q, expectation, variance
-        );
-
-        let x_min=(expectation-lambda)*3.0;
         let x_max=0.0;
         let num_u:usize=1024;
         let mut discrete_cf=HoldDiscreteCF::new(
@@ -564,11 +657,20 @@ mod tests {
             pd,
             lgd,
             balance,
-            weight:weight3,
+            weight,
             num:num_loans//homogenous
         };
-        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
-           
+        discrete_cf.process_loan(&loan, &u_domain, &get_el_from_loan, &get_var_from_loan, &log_lpm_cf);
+        
+        let expectation=discrete_cf.get_portfolio_expectation(&systemic_expectation);
+        let variance=discrete_cf.get_portfolio_variance(&systemic_expectation, &v2);
+        let expectation_liquid=risk_contributions::expectation_liquidity(
+            lambda, q, expectation
+        );
+        let variance_liquid=risk_contributions::variance_liquidity(
+            lambda, q, expectation, variance
+        );   
+        
         let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
         assert_eq!(final_cf.len(), num_u);
         let expectation_approx=cf_dist_utils::get_expectation_discrete_cf(
@@ -579,8 +681,8 @@ mod tests {
         );
         
         assert_abs_diff_eq!(expectation_approx, expectation_liquid, epsilon=0.00001);
-        assert_abs_diff_eq!((variance_approx-variance_liquid)/variance_liquid, 0.0, epsilon=0.000001)
-        //assert_abs_diff_eq!(variance_approx, variance_liquid, epsilon=0.01);
+        //assert_abs_diff_eq!((variance_approx-variance_liquid)/variance_liquid, 0.0, epsilon=0.000001)
+        assert_abs_diff_eq!(variance_approx, variance_liquid, epsilon=0.1);
     }
     #[test]
     fn test_compare_expected_value_and_variance_stochastic_lgd(){
@@ -590,38 +692,22 @@ mod tests {
         let num_loans=10000.0;
         let lambda=1000.0; //loss in the event of a liquidity crisis
         let q=0.01/(num_loans*pd*lgd*balance);
-        let expectation=-portfolio_expectation(
-            &vec![pd; num_loans as usize],
-            &vec![lgd; num_loans as usize],
-            &vec![balance; num_loans as usize]
-        );
+        let x_min=(-num_loans*pd*lgd*balance-lambda)*3.0;
         let lgd_variance=0.2;
         let v1=vec![0.4, 0.3];
         let v2=vec![0.4, 0.3];
-
+        let systemic_expectation=vec![1.0, 1.0];
         let v_mgf=gamma_mgf(v1); 
 
-        let weight1=vec![0.4, 0.6];
-        let weight2=vec![0.4, 0.6];
-        let weight3=vec![0.4, 0.6];
-        let variance=portfolio_variance(
-            &vec![pd; num_loans as usize],
-            &vec![lgd; num_loans as usize],
-            &vec![lgd_variance; num_loans as usize],
-            &vec![balance; num_loans as usize],
-            &vec![weight1; num_loans as usize],
-            &v2
-        );
+        let weight=vec![0.4, 0.6];
 
+        let get_el_from_loan=|loan:&Loan, w:f64|{
+            -loan.lgd*loan.balance*w*loan.pd*loan.num
+        };
+        let get_var_from_loan=|loan:&Loan, w:f64|{
+            (lgd_variance+1.0)*(loan.lgd*loan.balance).powi(2)*w*loan.pd*loan.num
+        };
 
-        let expectation_liquid=risk_contributions::expectation_liquidity(
-            lambda, q, expectation
-        );
-        let variance_liquid=risk_contributions::variance_liquidity(
-            lambda, q, expectation, variance
-        );
-
-        let x_min=(expectation-lambda)*3.0;
         let x_max=0.0;
         let num_u:usize=1024;
         let mut discrete_cf=HoldDiscreteCF::new(
@@ -632,7 +718,6 @@ mod tests {
 
         
         let a=1.0/lgd_variance;
-        //let lgd_fn=|u:&Complex<f64>, l:f64|(-u*l).exp();
         //the exponent is negative because l represents a loss
         let lgd_fn=|u:&Complex<f64>, l:f64|cf_functions::gamma_cf(
             &(-u*l), a, lgd_variance
@@ -646,11 +731,20 @@ mod tests {
             pd,
             lgd,
             balance,
-            weight:weight3,
+            weight,
             num:num_loans//homogenous
         };
-        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
-           
+        discrete_cf.process_loan(&loan, &u_domain, &get_el_from_loan, &get_var_from_loan, &log_lpm_cf);
+
+        let expectation=discrete_cf.get_portfolio_expectation(&systemic_expectation);
+        let variance=discrete_cf.get_portfolio_variance(&systemic_expectation, &v2);
+
+        let expectation_liquid=risk_contributions::expectation_liquidity(
+            lambda, q, expectation
+        );
+        let variance_liquid=risk_contributions::variance_liquidity(
+            lambda, q, expectation, variance
+        );
         let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
         assert_eq!(final_cf.len(), num_u);
         let expectation_approx=cf_dist_utils::get_expectation_discrete_cf(
@@ -661,8 +755,6 @@ mod tests {
         );
         
         assert_abs_diff_eq!(expectation_approx, expectation_liquid, epsilon=0.00001);
-        //this seems to be awfully large variation.  Is it a problem with the approximation or the variance computation?  Note that this becomes nearly exact when not using stochastic LGD
-        //assert_abs_diff_eq!((variance_approx-variance_liquid)/variance_liquid, 0.0, epsilon=0.01);
-        assert_abs_diff_eq!(variance_approx, variance_liquid, epsilon=0.01);
+        assert_abs_diff_eq!(variance_approx, variance_liquid, epsilon=0.1);
     }
 }
