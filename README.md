@@ -46,7 +46,7 @@ With optional density export:
 `./target/release/loan_cf $(cat ./data/parameters.json)  ./data/loans.json ./docs/loan_density_full.json`
 
 ## Recommended implementation
-In a real production setting, there will typically be a finite set of segments that describe loans.  For example, a loan may have one of 10 risk ratings and one of 10 facility grades.  Loans may also be grouped by rough exposure amount (eg, roughly 10 seperate exposures).  This leads to 1000 different combinations.  Instead of simulating over every single loan, the model could simulate over each group, with each group multiplied by the number of loans in each group.  If there are 30 loans with risk rating 4, facility grade 6, and in exposure segment 5, then the exponent of the characteristic function would be 30*p(e^{uil}-1) where p is the probability of default associated with risk rating 4 and l is the combined dollar loss for a loan in segment 5 and facility grade 6.  
+In a real production setting, there will typically be a finite set of segments that describe loans.  For example, a loan may have one of 10 risk ratings and one of 10 facility grades.  Loans may also be grouped by rough exposure amount (eg, roughly 10 separate exposures).  This leads to 1000 different combinations.  Instead of simulating over every single loan, the model could simulate over each group, with each group multiplied by the number of loans in each group.  If there are 30 loans with risk rating 4, facility grade 6, and in exposure segment 5, then the exponent of the characteristic function would be 30*p(e^{uil}-1) where p is the probability of default associated with risk rating 4 and l is the combined dollar loss for a loan in segment 5 and facility grade 6.  
 
 This will dramatically decrease the computation time.
 
@@ -84,6 +84,13 @@ As an example, consider the correlation from the Risk Metrics technical document
 [1.0, .16, .08; .16, 1.0, .34; .08, .34, 1.0]
 
 The weight vector for an obligor in  industry 1 would be [.806, .129, .065].  The weight vector for an obligor in  industry 2 would be [.107, .666, .227].  The weight vector for an obligor in  industry 3 would be [.056, .240, .704].  
+
+## Immediate next steps
+
+* Move towards gamma distribution (rather than Gaussian)
+    * Requires changing input parameters
+* Add risk contributions
+    * Try to make independent from the loan_ec library
 
 ## Roadmap
 
