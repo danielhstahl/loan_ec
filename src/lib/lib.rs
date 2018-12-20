@@ -1,6 +1,5 @@
 pub mod vec_to_mat;
 pub mod vasicek;
-pub mod risk_contributions;
 pub mod loan_ec;
 #[macro_use]
 #[cfg(test)]

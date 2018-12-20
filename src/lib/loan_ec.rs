@@ -10,9 +10,6 @@ use vec_to_mat;
 extern crate serde_json;
 #[cfg(test)]
 use vasicek;
-#[cfg(test)]
-use risk_contributions;
-
 
 #[derive(Debug,Deserialize)]
 pub struct Loan {
@@ -20,16 +17,18 @@ pub struct Loan {
     pd:f64,
     lgd:f64,
     weight:Vec<f64>,
-    #[serde(default = "default_lgd_v")]
+    #[serde(default = "default_zero")]
+    r:f64,//the amount of liquidity risk 
+    #[serde(default = "default_zero")]
     lgd_variance:f64,
-    #[serde(default = "default_num")]
+    #[serde(default = "default_one")]
     num:f64
 }
 
-fn default_num()->f64{
+fn default_one()->f64{
     1.0
 }
-fn default_lgd_v()->f64{
+fn default_zero()->f64{
     0.0
 }
 
@@ -39,6 +38,57 @@ fn get_el_from_loan(loan:&Loan, w:f64)->f64{
 
 fn get_var_from_loan(loan:&Loan, w:f64)->f64{
     (1.0+loan.lgd_variance)*(loan.lgd*loan.balance).powi(2)*w*loan.pd*loan.num
+}
+/**
+self.el_vec.iter().zip(&loan.weight).map(|(el, &w)|{
+                el+get_el_from_loan(&loan, w)
+            }).collect::<Vec<_>>(),
+            self.var_vec.iter().zip(&loan.weight).map(|(var, &w)|{
+                var+get_var_from_loan(&loan, w)
+            }).collect::<Vec<_>>()
+
+*/
+fn risk_contribution(
+    loan:&Loan, 
+    el_vec:&[f64],
+    el_sys:&[f64],
+    var_sys:&[f64],
+    c:f64,
+    standard_deviation:f64
+)->f64{
+    let rc_e=el_sys.iter()
+        .zip(&loan.weight)
+        .map(|(e_s, &w)|{
+            get_el_from_loan(loan, w)*e_s
+        }).sum::<f64>(); 
+    let rc_v=el_sys.iter().zip(&loan.weight).map(|(el_s, &w)|{
+        get_var_from_loan(loan, w)*el_s
+        //loan.pd*(1.0+loan.lgd_variance)*w*el_s
+    }).sum::<f64>(); 
+    let rc_e_v=var_sys.iter()
+        .zip(&loan.weight)
+        .zip(el_vec)
+        .map(|((v_s, &w), e_v)|{
+            e_v*v_s*get_el_from_loan(loan, w)
+        }).sum::<f64>(); 
+    rc_e+c*(rc_e_v+rc_v)/standard_deviation
+}
+
+pub fn variance_liquidity(
+    lambda:f64,
+    q:f64,
+    expectation:f64,
+    variance:f64
+)->f64{
+    variance*(1.0+q*lambda).powi(2)-expectation*q*lambda.powi(2)
+}
+
+pub fn expectation_liquidity(
+    lambda:f64,
+    q:f64,
+    expectation:f64
+)->f64{
+    expectation*(1.0+q*lambda)
 }
 
 //lambda needs to be made negative, the probability of lambda occurring is
@@ -83,7 +133,7 @@ fn portfolio_expectation(
     el_vec.iter().zip(el_sys)
         .map(|(el_v, el_s)|{
             el_v*el_s
-        }).sum()
+        }).sum::<f64>()
 }
 //the assumption here is that the var_sys are independent...else instead
 //of vectors we need a matrix
@@ -97,12 +147,12 @@ fn portfolio_variance(
         .zip(el_sys)
         .map(|(var_v, el_s)|{
             el_s*var_v
-        }).sum();
+        }).sum::<f64>(); 
     let e_p:f64=el_vec.iter()
         .zip(var_sys)
         .map(|(el_v, var_s)|{
             el_v.powi(2)*var_s
-        }).sum();
+        }).sum::<f64>(); 
     v_p+e_p
 }
 
@@ -179,8 +229,14 @@ impl HoldDiscreteCF {
     pub fn get_portfolio_expectation(&self, expectation_systemic:&[f64])->f64{
         portfolio_expectation(&self.el_vec, expectation_systemic)
     }
-    pub fn get_portfolio_variance(&self, expectation_systemic:&[f64], variance_systemic:&[f64])->f64{
-        portfolio_variance(&self.el_vec, expectation_systemic, &self.var_vec, variance_systemic)
+    pub fn get_portfolio_variance(
+        &self, expectation_systemic:&[f64], 
+        variance_systemic:&[f64]
+    )->f64{
+        portfolio_variance(
+            &self.el_vec, expectation_systemic, 
+            &self.var_vec, variance_systemic
+        )
     }
     pub fn get_full_cf<U>(&self, mgf:U)->Vec<Complex<f64>>
     where U: Fn(&[Complex<f64>])->Complex<f64>+std::marker::Sync+std::marker::Send
@@ -223,6 +279,7 @@ mod tests {
         let loan=Loan{
             pd:0.05,
             lgd:0.5,
+            r:0.0,
             balance:1000.0,
             lgd_variance:0.0,
             weight:vec![0.5, 0.5, 0.5],
@@ -251,6 +308,7 @@ mod tests {
             lgd:0.5,
             balance:1000.0,
             lgd_variance:0.0,
+            r:0.0,
             weight:vec![0.5, 0.5, 0.5],
             num:1.0
         };
@@ -291,6 +349,7 @@ mod tests {
             lgd:0.5,
             lgd_variance:0.0,//doesnt matter for this test
             balance:1.0,
+            r:0.0,
             weight:vec![1.0],
             num:10000.0
         };
@@ -358,6 +417,7 @@ mod tests {
             pd,
             lgd,
             balance,
+            r:0.0,
             lgd_variance:0.0,
             weight:vec![1.0],
             num:num_loans//homogenous
@@ -371,7 +431,7 @@ mod tests {
         
         assert_abs_diff_eq!(expectation_approx, expectation, epsilon=0.00001);
         assert_abs_diff_eq!(
-            risk_contributions::expectation_liquidity(
+            expectation_liquidity(
                 lambda, q,
                 discrete_cf.get_portfolio_expectation(&vec![1.0])
             ), expectation, epsilon=0.00001
@@ -412,6 +472,7 @@ mod tests {
         let loan=Loan{
             pd,
             lgd,
+            r:0.0,
             balance,
             weight,
             lgd_variance:0.0,
@@ -421,10 +482,10 @@ mod tests {
         
         let expectation=discrete_cf.get_portfolio_expectation(&systemic_expectation);
         let variance=discrete_cf.get_portfolio_variance(&systemic_expectation, &v2);
-        let expectation_liquid=risk_contributions::expectation_liquidity(
+        let expectation_liquid=expectation_liquidity(
             lambda, q, expectation
         );
-        let variance_liquid=risk_contributions::variance_liquidity(
+        let variance_liquid=variance_liquidity(
             lambda, q, expectation, variance
         );   
         
@@ -477,6 +538,7 @@ mod tests {
             pd,
             lgd,
             balance,
+            r:0.0,
             lgd_variance,
             weight,
             num:num_loans//homogenous
@@ -486,10 +548,10 @@ mod tests {
         let expectation=discrete_cf.get_portfolio_expectation(&systemic_expectation);
         let variance=discrete_cf.get_portfolio_variance(&systemic_expectation, &v2);
 
-        let expectation_liquid=risk_contributions::expectation_liquidity(
+        let expectation_liquid=expectation_liquidity(
             lambda, q, expectation
         );
-        let variance_liquid=risk_contributions::variance_liquidity(
+        let variance_liquid=variance_liquidity(
             lambda, q, expectation, variance
         );
         let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
@@ -503,5 +565,83 @@ mod tests {
         
         assert_abs_diff_eq!(expectation_approx, expectation_liquid, epsilon=0.00001);
         assert_abs_diff_eq!(variance_approx, variance_liquid, epsilon=0.1);
+    }
+    #[test]
+    fn test_basic_risk_contribution(){
+        let balance=1.0;
+        let pd=0.05;
+        let lgd=0.5;
+        let num_loans=9999.0;
+        let lambda=0.0; //loss in the event of a liquidity crisis
+        let q=0.0/(num_loans*pd*lgd*balance);
+        let x_min=(-num_loans*pd*lgd*balance-lambda)*3.0;
+        let v1=vec![0.4, 0.3];
+        let v2=vec![0.4, 0.3];
+        let systemic_expectation=vec![1.0, 1.0];
+        let v_mgf=gamma_mgf(v1); 
+        let lgd_variance=0.2;
+        let weight1=vec![0.4, 0.6];
+        let weight2=vec![0.4, 0.6];
+
+        let x_max=0.0;
+        let num_u:usize=1024;
+        let mut discrete_cf=HoldDiscreteCF::new(
+            num_u, v2.len()
+        );
+       
+        let liquid_fn=get_liquidity_risk_fn(lambda, q);
+
+        //the exponent is negative because l represents a loss
+        let lgd_fn=|u:&Complex<f64>, l:f64, lgd_v:f64|cf_functions::gamma_cf(
+            &(-u*l), 1.0/lgd_v, lgd_v
+        );
+        let u_domain:Vec<Complex<f64>>=fang_oost::get_u_domain(
+            num_u, x_min, x_max
+        ).collect();
+        let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
+        
+        let loan=Loan{
+            pd,
+            lgd,
+            balance,
+            lgd_variance,
+            weight:weight1,
+            r:0.0,
+            num:num_loans//homogenous
+        };
+        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+
+        let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
+        assert_eq!(final_cf.len(), num_u);
+        
+        let new_loan=Loan{
+            pd,
+            lgd,
+            balance,
+            lgd_variance,
+            weight:weight2,
+            r:0.0,
+            num:1.0
+        };
+
+        let c=5.0;//arbitrary
+        let(_cf_new, el_inc, var_inc)=discrete_cf.experiment_loan(&new_loan, &u_domain, &log_lpm_cf);
+        let new_variance=portfolio_variance(
+            &el_inc,
+            &systemic_expectation, 
+            &var_inc, 
+            &v2
+        );
+        let new_expectation=portfolio_expectation(
+            &el_inc,
+            &systemic_expectation
+        );
+        let rc=risk_contribution(
+            &new_loan, &el_inc, 
+            &systemic_expectation,
+            &v2, c, 
+            new_variance.sqrt()
+        );
+        assert_abs_diff_eq!(rc*10000.0, new_expectation+c*new_variance.sqrt(), epsilon=0.1);
     }
 }
