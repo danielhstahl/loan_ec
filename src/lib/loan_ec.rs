@@ -54,8 +54,7 @@ fn risk_contribution(
     q:f64,
     c:f64
 )->f64{
-    let base_lambda0=1.0+q*lambda0;
-    let el_scalar_incremental=base_lambda0;
+    let el_scalar_incremental=1.0+q*lambda0;
     let el_scalar_total=q*loan.r*loan.balance;
     let expectation_total=portfolio_expectation(el_vec, el_sys);
     let variance_total=portfolio_variance(el_vec, el_sys, var_vec, var_sys);
@@ -66,12 +65,12 @@ fn risk_contribution(
         variance_total
     ).sqrt();
 
-    let var_scalar_incremental=base_lambda0.powi(2);
+    let var_scalar_incremental=el_scalar_incremental.powi(2);
 
-    let var_scalar_total=q*loan.r*loan.balance*(
-            2.0*base_lambda0+q*lambda
+    let var_scalar_total=el_scalar_total*(
+            2.0*el_scalar_incremental+q*lambda
         );
-    let var_el_total=q*loan.r*loan.balance*(
+    let var_el_total=el_scalar_total*(
             2.0*lambda0+lambda
         );
     let expectation_incremental=el_sys.iter()
@@ -916,7 +915,7 @@ mod tests {
 
         let c=5.0;//arbitrary
         let EconomicCapitalAttributes{
-            el_vec, var_vec, lambda, ..
+            el_vec, var_vec, ..
         }=discrete_cf.experiment_loan(&new_loan, &u_domain, &log_lpm_cf);
         let new_variance=portfolio_variance(
             &el_vec,
