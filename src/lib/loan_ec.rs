@@ -71,7 +71,9 @@ fn risk_contribution(
     let var_scalar_total=q*loan.r*loan.balance*(
             2.0*base_lambda0+q*lambda
         );
-    
+    let var_el_total=q*loan.r*loan.balance*(
+            2.0*lambda0+lambda
+        );
     let expectation_incremental=el_sys.iter()
         .zip(&loan.weight)
         .map(|(e_s, &w)|{
@@ -93,8 +95,11 @@ fn risk_contribution(
     el_scalar_incremental*expectation_incremental+
         el_scalar_total*expectation_total+
         c*(
+            
             var_scalar_incremental*variance_incremental+
-            var_scalar_total*variance_total
+            var_scalar_total*variance_total-
+            expectation_incremental*q*lambda0.powi(2)-
+            expectation_total*var_el_total
         )/standard_deviation
 }
 
@@ -838,6 +843,100 @@ mod tests {
             new_variance
         );
         assert_abs_diff_eq!(lambda, 0.0, epsilon=0.00000001);
+        let rc=risk_contribution(
+            &new_loan, &el_vec, 
+            &systemic_expectation,
+            &var_vec, &v2, lambda0, 
+            0.0, q, c
+        );
+        assert_abs_diff_eq!(
+            rc*(num_loans+1.0), 
+            liquid_exp+c*liquid_var.sqrt(), 
+            epsilon=0.1
+        );
+    }
+    #[test]
+    fn test_lambda_qzero_risk_contribution(){
+        let balance=1.0;
+        let pd=0.05;
+        let lgd=0.5;
+        let num_loans=9999.0;
+        let r=0.2;
+        let lambda0=1000.0; //loss in the event of a liquidity crisis
+        let q=0.0/(num_loans*pd*lgd*balance);
+        let x_min=(-num_loans*pd*lgd*balance-lambda0)*3.0;
+        let v1=vec![0.4, 0.3];
+        let v2=vec![0.4, 0.3];
+        let systemic_expectation=vec![1.0, 1.0];
+        let v_mgf=gamma_mgf(v1); 
+        let lgd_variance=0.2;
+        let weight1=vec![0.4, 0.6];
+        let weight2=vec![0.4, 0.6];
+
+        let x_max=0.0;
+        let num_u:usize=1024;
+        let mut discrete_cf=EconomicCapitalAttributes::new(
+            num_u, v2.len()
+        );
+
+        let liquid_fn=get_liquidity_risk_fn(lambda0, q);
+
+        //the exponent is negative because l represents a loss
+        let lgd_fn=|u:&Complex<f64>, l:f64, lgd_v:f64|cf_functions::gamma_cf(
+            &(-u*l), 1.0/lgd_v, lgd_v
+        );
+        let u_domain:Vec<Complex<f64>>=fang_oost::get_u_domain(
+            num_u, x_min, x_max
+        ).collect();
+        let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
+
+        let loan=Loan{
+            pd,
+            lgd,
+            balance,
+            lgd_variance,
+            weight:weight1,
+            r,
+            num:num_loans//homogenous
+        };
+        discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
+
+        let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
+        assert_eq!(final_cf.len(), num_u);
+
+        let new_loan=Loan{
+            pd,
+            lgd,
+            balance,
+            lgd_variance,
+            weight:weight2,
+            r,
+            num:1.0
+        };
+
+        let c=5.0;//arbitrary
+        let EconomicCapitalAttributes{
+            el_vec, var_vec, lambda, ..
+        }=discrete_cf.experiment_loan(&new_loan, &u_domain, &log_lpm_cf);
+        let new_variance=portfolio_variance(
+            &el_vec,
+            &systemic_expectation, 
+            &var_vec, 
+            &v2
+        );
+        let new_expectation=portfolio_expectation(
+            &el_vec,
+            &systemic_expectation
+        );
+        let liquid_exp=expectation_liquidity(
+            lambda0, q, 
+            new_expectation
+        );
+        let liquid_var=variance_liquidity(
+            lambda0, q, 
+            new_expectation, 
+            new_variance
+        );
         let rc=risk_contribution(
             &new_loan, &el_vec, 
             &systemic_expectation,
