@@ -100,7 +100,7 @@ fn main()-> Result<(), io::Error> {
     };
     let log_lpm_cf=loan_ec::get_log_lpm_cf(&lgd_fn, &liquid_fn);
 
-    let mut discrete_cf=loan_ec::HoldDiscreteCF::new(
+    let mut discrete_cf=loan_ec::EconomicCapitalAttributes::new(
         num_u, num_w
     );
 
