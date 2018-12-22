@@ -1096,9 +1096,6 @@ mod tests {
         };
         discrete_cf.process_loan(&loan1, &u_domain, &log_lpm_cf);
 
-        //let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
-        //assert_eq!(final_cf.len(), num_u);
-
         let loan2=Loan{
             pd:pd2,
             lgd:lgd2,
