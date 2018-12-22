@@ -61,6 +61,7 @@ fn biv_gaussian(x1:f64, x2:f64, rho_sq:f64, normal:&Gaussian)->f64{
     }
 }
 
+//https://www.nag.com/doc/techrep/pdf/tr1_16.pdf
 fn cov_merton(p:f64, rho_sq:f64)->f64{
     let normal=Gaussian::new(0.0, 1.0);
     let x=normal.inverse(p);
