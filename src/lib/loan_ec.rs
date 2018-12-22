@@ -42,7 +42,6 @@ fn get_var_from_loan(loan:&Loan, w:f64)->f64{
 fn get_lambda_from_loan(loan:&Loan)->f64{
     loan.balance*loan.r*loan.num
 }
-
 fn risk_contribution(
     loan:&Loan, 
     el_vec:&[f64],
@@ -55,7 +54,7 @@ fn risk_contribution(
     c:f64
 )->f64{
     let el_scalar_incremental=1.0+q*lambda0;
-    let el_scalar_total=q*loan.r*loan.balance;
+    let el_scalar_total=q*get_lambda_from_loan(loan);
     let expectation_total=portfolio_expectation(el_vec, el_sys);
     let variance_total=portfolio_variance(el_vec, el_sys, var_vec, var_sys);
 
@@ -94,7 +93,6 @@ fn risk_contribution(
     el_scalar_incremental*expectation_incremental+
         el_scalar_total*expectation_total+
         c*(
-            
             var_scalar_incremental*variance_incremental+
             var_scalar_total*variance_total-
             expectation_incremental*q*lambda0.powi(2)-
@@ -1042,6 +1040,120 @@ mod tests {
         );
         assert_abs_diff_eq!(
             rc*(num_loans+1.0), 
+            liquid_exp+c*liquid_var.sqrt(), 
+            epsilon=0.1
+        );
+    }
+    #[test]
+    fn test_lambda_incremental_risk_contribution_non_homogenous(){
+        let balance1=1.0;
+        let balance2=2.0;
+        let pd1=0.05;
+        let pd2=0.03;
+        let lgd1=0.5;
+        let lgd2=0.4;
+        let num_loans1=6000.0;
+        let num_loans2=4000.0;
+        let r1=0.1;
+        let r2=0.2;
+        let lambda0=100.0; //loss in the event of a liquidity crisis
+        let lambda=r1*balance1*num_loans1+r2*balance2*num_loans2;
+        let q=0.01/(num_loans1*pd1*lgd1*balance1+num_loans2*pd2*lgd2*balance2);
+        let x_min=(
+            -num_loans1*pd1*lgd1*balance1-
+            num_loans2*pd2*lgd2*balance2-lambda0-lambda
+        )*3.0;
+        let v1=vec![0.4, 0.3];
+        let v2=vec![0.4, 0.3];
+        let systemic_expectation=vec![1.0, 1.0];
+        let v_mgf=gamma_mgf(v1); 
+        let lgd_variance=0.2;
+        let weight1_1=vec![0.4, 0.6];
+        let weight1_2=vec![0.4, 0.6];
+        let weight2_1=vec![0.3, 0.7];
+        let weight2_2=vec![0.3, 0.7];
+
+        let x_max=0.0;
+        let num_u:usize=1024;
+        let mut discrete_cf=EconomicCapitalAttributes::new(
+            num_u, v2.len()
+        );
+
+        let liquid_fn=get_liquidity_risk_fn(lambda0+lambda, q);
+
+        //the exponent is negative because l represents a loss
+        let lgd_fn=|u:&Complex<f64>, l:f64, lgd_v:f64|cf_functions::gamma_cf(
+            &(-u*l), 1.0/lgd_v, lgd_v
+        );
+        let u_domain:Vec<Complex<f64>>=fang_oost::get_u_domain(
+            num_u, x_min, x_max
+        ).collect();
+        let log_lpm_cf=get_log_lpm_cf(&lgd_fn, &liquid_fn);
+
+        let loan1=Loan{
+            pd:pd1,
+            lgd:lgd1,
+            balance:balance1,
+            lgd_variance,
+            weight:weight1_1,
+            r:r1,
+            num:num_loans1//homogenous
+        };
+        discrete_cf.process_loan(&loan1, &u_domain, &log_lpm_cf);
+
+        //let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
+        //assert_eq!(final_cf.len(), num_u);
+
+        let loan2=Loan{
+            pd:pd2,
+            lgd:lgd2,
+            balance:balance2,
+            lgd_variance,
+            weight:weight2_1,
+            r:r2,
+            num:num_loans2
+        };
+
+        let c=5.0;//arbitrary
+        let EconomicCapitalAttributes{
+            el_vec, var_vec, lambda:lambda_new, ..
+        }=discrete_cf.experiment_loan(&loan2, &u_domain, &log_lpm_cf);
+        let new_variance=portfolio_variance(
+            &el_vec,
+            &systemic_expectation, 
+            &var_vec, 
+            &v2
+        );
+        let new_expectation=portfolio_expectation(
+            &el_vec,
+            &systemic_expectation
+        );
+        let liquid_exp=expectation_liquidity(
+            lambda+lambda0, q, 
+            new_expectation
+        );
+        let liquid_var=variance_liquidity(
+            lambda+lambda0, q, 
+            new_expectation, 
+            new_variance
+        );
+
+        assert_abs_diff_eq!(lambda, lambda_new, epsilon=0.0000001);
+
+        let rc1=risk_contribution(
+            &loan1, &el_vec, 
+            &systemic_expectation,
+            &var_vec, &v2, lambda0, 
+            lambda, q, c
+        );
+        let rc2=risk_contribution(
+            &loan2, &el_vec, 
+            &systemic_expectation,
+            &var_vec, &v2, lambda0, 
+            lambda, q, c
+        );
+        assert_abs_diff_eq!(
+            rc1+rc2, 
             liquid_exp+c*liquid_var.sqrt(), 
             epsilon=0.1
         );
