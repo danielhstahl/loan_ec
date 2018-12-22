@@ -35,40 +35,40 @@ struct Parameters {
 }
 
 //for the bivariate cdf...see https://apps.dtic.mil/dtic/tr/fulltext/u2/a125033.pdf
-fn mean_h(h:f64, rho:f64, normal:&Gaussian)->f64{
-    -normal.density(h)*rho/normal.distribution(h)
+fn mean_h(h:f64, rho_sq:f64, normal:&Gaussian)->f64{
+    -normal.density(h)*rho_sq/normal.distribution(h)
 }
-fn var_h(h:f64, rho:f64, mean:f64)->f64{
-    1.0+rho*h*mean-mean.powi(2)
+fn var_h(h:f64, rho_sq:f64, mean:f64)->f64{
+    1.0+rho_sq*h*mean-mean.powi(2)
 }
 
 //needed to convert from variance/covariance in Merton to Credit Risk Plus
-fn biv_gaussian_orig(x1:f64, x2:f64, rho:f64, normal:&Gaussian)->f64{
-    let mean=mean_h(x1, rho, &normal);
-    let variance=var_h(x1, rho, mean);
+fn biv_gaussian_orig(x1:f64, x2:f64, rho_sq:f64, normal:&Gaussian)->f64{
+    let mean=mean_h(x1, rho_sq, &normal);
+    let variance=var_h(x1, rho_sq, mean);
     normal.distribution(x1)
         *normal.distribution((x2-mean)/variance.sqrt())
 }
 
-fn biv_gaussian(x1:f64, x2:f64, rho:f64, normal:&Gaussian)->f64{
+fn biv_gaussian(x1:f64, x2:f64, rho_sq:f64, normal:&Gaussian)->f64{
     let c=if x1>x2{x1}else{x2};
     let d=if x1>x2{x2}else{x1};
     if c<0.0{
-        biv_gaussian_orig(c, d, rho, normal)
+        biv_gaussian_orig(c, d, rho_sq, normal)
     }
     else{
-        normal.distribution(d)-biv_gaussian_orig(-c, d, -rho, normal)
+        normal.distribution(d)-biv_gaussian_orig(-c, d, -rho_sq, normal)
     }
 }
 
-fn cov_merton(p:f64, rho:f64)->f64{
+fn cov_merton(p:f64, rho_sq:f64)->f64{
     let normal=Gaussian::new(0.0, 1.0);
     let x=normal.inverse(p);
-    biv_gaussian(x, x, rho, &normal)
+    biv_gaussian(x, x, rho_sq, &normal)
 }
 //converts to variance
-fn get_systemic_variance(p:f64, rho:f64)->f64{
-    cov_merton(p, rho)/p.powi(2)-1.0
+fn get_systemic_variance(p:f64, rho_sq:f64)->f64{
+    cov_merton(p, rho_sq)/p.powi(2)-1.0
 }
 
 
@@ -93,8 +93,8 @@ fn main()-> Result<(), io::Error> {
     }= serde_json::from_str(args[1].as_str())?;
     let num_w=r_squared.len();
     let p=0.05;//just for tests
-    let systemic_variance=r_squared.iter().map(|r|{
-        get_systemic_variance(p, r.sqrt())//sqrt since given r-squared
+    let systemic_variance=r_squared.iter().map(|&r_sq|{
+        get_systemic_variance(p, r_sq)//sqrt since given r-squared
     }).collect::<Vec<_>>();
     
     systemic_variance.iter().for_each(|v|{
@@ -127,8 +127,6 @@ fn main()-> Result<(), io::Error> {
         let loan: loan_ec::Loan = serde_json::from_str(&line?)?;
         discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
     }  
-    //TODO!! get variance from R^2
-    //let temp_v=vec![0.5; 20];
     let v_mgf=gamma_mgf(systemic_variance); 
     let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
     if args.len()>3 {
@@ -177,8 +175,8 @@ mod tests {
     #[test]
     fn cov_merton_compare_r_1(){
         let p=0.05;
-        let rho=0.5;
-        let result=cov_merton(p, rho);
+        let rho_sq=0.5;
+        let result=cov_merton(p, rho_sq);
         assert_abs_diff_eq!(
             result, 
             0.01218943, 
@@ -187,11 +185,11 @@ mod tests {
     }
     #[test]
     fn biv_gaussian_compare_r_1(){
-        let rho=0.7;
+        let rho_sq=0.7;
         let k=1.0;
         let h=0.2;
         let normal=Gaussian::new(0.0, 1.0);
-        let result=biv_gaussian(h, k, rho, &normal);
+        let result=biv_gaussian(h, k, rho_sq, &normal);
         assert_abs_diff_eq!(
             result, 
             0.55818, 
@@ -200,11 +198,11 @@ mod tests {
     }
     #[test]
     fn biv_gaussian_compare_r_2(){
-        let rho=-0.7;
+        let rho_sq=-0.7;
         let k=-1.0;
         let h=0.2;
         let normal=Gaussian::new(0.0, 1.0);
-        let result=biv_gaussian_orig(k, h, rho, &normal);
+        let result=biv_gaussian_orig(k, h, rho_sq, &normal);
         assert_abs_diff_eq!(
             result, 
             0.02108,
@@ -213,10 +211,10 @@ mod tests {
     }
     #[test]
     fn mean_compare_r_1(){
-        let rho=-0.7;
+        let rho_sq=-0.7;
         let normal=Gaussian::new(0.0, 1.0);
         let h=-1.0;
-        let result=mean_h(h, rho, &normal);
+        let result=mean_h(h, rho_sq, &normal);
         assert_abs_diff_eq!(
             result, 
             1.0676, 
@@ -225,14 +223,25 @@ mod tests {
     }
     #[test]
     fn var_compare_r_1(){
-        let rho=-0.7;
+        let rho_sq=-0.7;
         let h=-1.0;
         let normal=Gaussian::new(0.0, 1.0);
-        let mean=mean_h(h, rho, &normal);
-        let var=var_h(h, rho,  mean);
+        let mean=mean_h(h, rho_sq, &normal);
+        let var=var_h(h, rho_sq,  mean);
         assert_abs_diff_eq!(
             var.sqrt(), 
             0.77946,
+            epsilon=0.00001
+        );
+    }
+    #[test]
+    fn cov_compare_r_2(){
+        let p=0.02;
+        let rho_sq=(0.6 as f64).powi(2);
+        let result=cov_merton(p, rho_sq)-p.powi(2);
+        assert_abs_diff_eq!(
+            result, 
+            0.001689042,
             epsilon=0.00001
         );
     }
