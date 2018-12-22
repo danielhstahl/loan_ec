@@ -2,7 +2,6 @@ extern crate fang_oost;
 extern crate num_complex;
 extern crate rayon;
 extern crate cf_functions;
-extern crate rand;
 extern crate cf_dist_utils;
 use self::num_complex::Complex;
 use self::rayon::prelude::*;

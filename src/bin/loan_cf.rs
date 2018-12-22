@@ -2,7 +2,6 @@ extern crate fang_oost;
 extern crate num_complex;
 extern crate rayon;
 extern crate cf_functions;
-extern crate rand;
 extern crate utils;
 use utils::loan_ec;
 extern crate cf_dist_utils;
@@ -17,24 +16,59 @@ use std::io::prelude::*; //needed for write
 use std::io::BufReader;
 use std::io::BufRead;
 use std::fs::File;
+extern crate probability;
+use probability::prelude::*;
+#[macro_use]
+#[cfg(test)]
+extern crate approx;
 
 #[derive(Debug,Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Parameters {
     lambda:f64,
     q:f64,
-    alpha_l:f64,
-    b_l:f64,
-    sig_l:f64,
-    t:f64,
     num_u:usize,
     x_min:f64,
     x_max:f64,
     num_x:Option<usize>,
-    alpha:Vec<f64>,
-    sigma:Vec<f64>,
-    rho:Vec<f64>,
-    y0:Vec<f64>
+    r_squared:Vec<f64>
+}
+
+//for the bivariate cdf...see https://apps.dtic.mil/dtic/tr/fulltext/u2/a125033.pdf
+fn mean_h(h:f64, rho_sq:f64, normal:&Gaussian)->f64{
+    -normal.density(h)*rho_sq/normal.distribution(h)
+}
+fn var_h(h:f64, rho_sq:f64, mean:f64)->f64{
+    1.0+rho_sq*h*mean-mean.powi(2)
+}
+
+//needed to convert from variance/covariance in Merton to Credit Risk Plus
+fn biv_gaussian_orig(x1:f64, x2:f64, rho_sq:f64, normal:&Gaussian)->f64{
+    let mean=mean_h(x1, rho_sq, &normal);
+    let variance=var_h(x1, rho_sq, mean);
+    normal.distribution(x1)
+        *normal.distribution((x2-mean)/variance.sqrt())
+}
+
+fn biv_gaussian(x1:f64, x2:f64, rho_sq:f64, normal:&Gaussian)->f64{
+    let c=if x1>x2{x1}else{x2};
+    let d=if x1>x2{x2}else{x1};
+    if c<0.0{
+        biv_gaussian_orig(c, d, rho_sq, normal)
+    }
+    else{
+        normal.distribution(d)-biv_gaussian_orig(-c, d, -rho_sq, normal)
+    }
+}
+
+fn cov_merton(p:f64, rho_sq:f64)->f64{
+    let normal=Gaussian::new(0.0, 1.0);
+    let x=normal.inverse(p);
+    biv_gaussian(x, x, rho_sq, &normal)
+}
+//converts to variance
+fn get_systemic_variance(p:f64, rho_sq:f64)->f64{
+    cov_merton(p, rho_sq)/p.powi(2)-1.0
 }
 
 
@@ -47,46 +81,25 @@ fn gamma_mgf(variance:Vec<f64>)->
         }).sum::<Complex<f64>>().exp()
     }
 }
-/*
-fn risk_contribution_existing_loan(
-    loan:&Loan, gamma_variances:&[f64], risk_measure:f64,
-    variance_l:f64,
-    expectation_portfolio:f64, 
-    variance_portfolio:f64,
-    lambda:f64, q:f64
-)->f64{
-    let expectation_liquid=risk_contributions::expectation_liquidity(
-        lambda, q, expectation_portfolio
-    );
-    let variance_liquid=risk_contributions::variance_liquidity(
-        lambda, q, expectation_portfolio, variance_portfolio
-    );
-    let rj=0.0;
-    risk_contributions::generic_risk_contribution(
-        loan.pd, loan.lgd*loan.balance, 
-        variance_l, expectation_portfolio, 
-        variance_portfolio, 
-        risk_contributions::variance_from_independence(&loan.weight, gamma_variances),
-        risk_contributions::scale_contributions(
-            risk_measure, expectation_liquid, variance_liquid
-        ),
-        rj,
-        loan.balance,
-        lambda, 
-        lambda,
-        q
-    )
-}*/
+
 
 fn main()-> Result<(), io::Error> {
     let args: Vec<String> = std::env::args().collect();
     let Parameters{
         lambda, q,  
-         num_u, 
-        x_min, x_max, alpha, 
+        num_u, x_min, 
+        x_max, r_squared, 
         ..
     }= serde_json::from_str(args[1].as_str())?;
-    let num_w=alpha.len();
+    let num_w=r_squared.len();
+    let p=0.05;//just for tests
+    let systemic_variance=r_squared.iter().map(|&r_sq|{
+        get_systemic_variance(p, r_sq)//sqrt since given r-squared
+    }).collect::<Vec<_>>();
+    
+    systemic_variance.iter().for_each(|v|{
+        println!("this is var: {}", v);
+    });
     let liquid_fn=loan_ec::get_liquidity_risk_fn(lambda, q);
     let lgd_fn=|u:&Complex<f64>, l:f64, lgd_v:f64|{
         if lgd_v>0.0{
@@ -114,9 +127,7 @@ fn main()-> Result<(), io::Error> {
         let loan: loan_ec::Loan = serde_json::from_str(&line?)?;
         discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
     }  
-    //TODO!! get variance from R^2
-    let temp_v=vec![0.5; 20];
-    let v_mgf=gamma_mgf(temp_v); 
+    let v_mgf=gamma_mgf(systemic_variance); 
     let final_cf:Vec<Complex<f64>>=discrete_cf.get_full_cf(&v_mgf);
     if args.len()>3 {
         let x_domain:Vec<f64>=fang_oost::get_x_domain(1024, x_min, x_max).collect();
@@ -160,5 +171,78 @@ mod tests {
         let result=cf(&vec![u]);
         let expected=(1.0-u*theta).powf(-kappa);
         assert_eq!(result, expected);
+    }
+    #[test]
+    fn cov_merton_compare_r_1(){
+        let p=0.05;
+        let rho_sq=0.5;
+        let result=cov_merton(p, rho_sq);
+        assert_abs_diff_eq!(
+            result, 
+            0.01218943, 
+            epsilon=0.001
+        );
+    }
+    #[test]
+    fn biv_gaussian_compare_r_1(){
+        let rho_sq=0.7;
+        let k=1.0;
+        let h=0.2;
+        let normal=Gaussian::new(0.0, 1.0);
+        let result=biv_gaussian(h, k, rho_sq, &normal);
+        assert_abs_diff_eq!(
+            result, 
+            0.55818, 
+            epsilon=0.00001
+        );
+    }
+    #[test]
+    fn biv_gaussian_compare_r_2(){
+        let rho_sq=-0.7;
+        let k=-1.0;
+        let h=0.2;
+        let normal=Gaussian::new(0.0, 1.0);
+        let result=biv_gaussian_orig(k, h, rho_sq, &normal);
+        assert_abs_diff_eq!(
+            result, 
+            0.02108,
+            epsilon=0.00001
+        );
+    }
+    #[test]
+    fn mean_compare_r_1(){
+        let rho_sq=-0.7;
+        let normal=Gaussian::new(0.0, 1.0);
+        let h=-1.0;
+        let result=mean_h(h, rho_sq, &normal);
+        assert_abs_diff_eq!(
+            result, 
+            1.0676, 
+            epsilon=0.00001
+        );
+    }
+    #[test]
+    fn var_compare_r_1(){
+        let rho_sq=-0.7;
+        let h=-1.0;
+        let normal=Gaussian::new(0.0, 1.0);
+        let mean=mean_h(h, rho_sq, &normal);
+        let var=var_h(h, rho_sq,  mean);
+        assert_abs_diff_eq!(
+            var.sqrt(), 
+            0.77946,
+            epsilon=0.00001
+        );
+    }
+    #[test]
+    fn cov_compare_r_2(){
+        let p=0.02;
+        let rho_sq=(0.6 as f64).powi(2);
+        let result=cov_merton(p, rho_sq)-p.powi(2);
+        assert_abs_diff_eq!(
+            result, 
+            0.001689042,
+            epsilon=0.00001
+        );
     }
 }
