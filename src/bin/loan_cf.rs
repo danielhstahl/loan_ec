@@ -246,4 +246,20 @@ mod tests {
             epsilon=0.00001
         );
     }
+    #[test]
+    fn test_systemic(){
+        let p=0.02;
+        let rho_sq=(0.6 as f64).powi(2);
+        let cov_merton=cov_merton(p, rho_sq)-p.powi(2);
+
+        let systemic_variance=get_systemic_variance(p, rho_sq);
+        let cov_creditriskplus=systemic_variance*p.powi(2);
+
+
+        assert_abs_diff_eq!(
+            cov_merton, 
+            cov_creditriskplus,
+            epsilon=0.00001
+        );
+    }
 }

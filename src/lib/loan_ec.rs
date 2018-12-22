@@ -1062,20 +1062,16 @@ mod tests {
             -num_loans1*pd1*lgd1*balance1-
             num_loans2*pd2*lgd2*balance2-lambda0-lambda
         )*3.0;
-        let v1=vec![0.4, 0.3];
-        let v2=vec![0.4, 0.3];
+        let v=vec![0.4, 0.3];
         let systemic_expectation=vec![1.0, 1.0];
-        let v_mgf=gamma_mgf(v1); 
         let lgd_variance=0.2;
         let weight1_1=vec![0.4, 0.6];
-        let weight1_2=vec![0.4, 0.6];
         let weight2_1=vec![0.3, 0.7];
-        let weight2_2=vec![0.3, 0.7];
 
         let x_max=0.0;
         let num_u:usize=1024;
         let mut discrete_cf=EconomicCapitalAttributes::new(
-            num_u, v2.len()
+            num_u, v.len()
         );
 
         let liquid_fn=get_liquidity_risk_fn(lambda0+lambda, q);
@@ -1121,7 +1117,7 @@ mod tests {
             &el_vec,
             &systemic_expectation, 
             &var_vec, 
-            &v2
+            &v
         );
         let new_expectation=portfolio_expectation(
             &el_vec,
@@ -1142,13 +1138,13 @@ mod tests {
         let rc1=risk_contribution(
             &loan1, &el_vec, 
             &systemic_expectation,
-            &var_vec, &v2, lambda0, 
+            &var_vec, &v, lambda0, 
             lambda, q, c
         );
         let rc2=risk_contribution(
             &loan2, &el_vec, 
             &systemic_expectation,
-            &var_vec, &v2, lambda0, 
+            &var_vec, &v, lambda0, 
             lambda, q, c
         );
         assert_abs_diff_eq!(
