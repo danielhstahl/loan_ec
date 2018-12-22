@@ -34,8 +34,7 @@ struct Parameters {
     r_squared:Vec<f64>
 }
 
-
-
+//for the bivariate cdf...see https://apps.dtic.mil/dtic/tr/fulltext/u2/a125033.pdf
 fn mean_h(h:f64, rho:f64, normal:&Gaussian)->f64{
     -normal.density(h)*rho/normal.distribution(h)
 }
@@ -67,7 +66,7 @@ fn cov_merton(p:f64, rho:f64)->f64{
     let x=normal.inverse(p);
     biv_gaussian(x, x, rho, &normal)
 }
-
+//converts to variance
 fn get_systemic_variance(p:f64, rho:f64)->f64{
     cov_merton(p, rho)/p.powi(2)-1.0
 }
@@ -96,8 +95,11 @@ fn main()-> Result<(), io::Error> {
     let p=0.05;//just for tests
     let systemic_variance=r_squared.iter().map(|r|{
         get_systemic_variance(p, r.sqrt())//sqrt since given r-squared
-    }).collect();
-
+    }).collect::<Vec<_>>();
+    
+    systemic_variance.iter().for_each(|v|{
+        println!("this is var: {}", v);
+    });
     let liquid_fn=loan_ec::get_liquidity_risk_fn(lambda, q);
     let lgd_fn=|u:&Complex<f64>, l:f64, lgd_v:f64|{
         if lgd_v>0.0{
