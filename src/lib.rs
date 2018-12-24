@@ -631,7 +631,6 @@ mod tests {
         let q=0.01/(num_loans*pd*lgd*balance);
         let x_min=(-num_loans*pd*lgd*balance-lambda)*3.0;
         let v=vec![0.4, 0.3];
-        //let v2=vec![0.4, 0.3];
         let systemic_expectation=vec![1.0, 1.0];
         let v_mgf=gamma_mgf(&v); 
         let lgd_variance=0.2;
