@@ -1,10 +1,8 @@
 //! Economic capital for a loan portfolio.  Based on https://github.com/phillyfan1138/CreditRiskExtensions/blob/master/StahlMultiVariatePaper.pdf. 
 //! 
-extern crate fang_oost;
 extern crate num_complex;
 extern crate rayon;
-extern crate cf_functions;
-extern crate cf_dist_utils;
+
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
@@ -14,7 +12,12 @@ mod vec_to_mat;
 #[cfg(test)]
 #[macro_use]
 extern crate approx;
-
+#[cfg(test)]
+extern crate fang_oost;
+#[cfg(test)]
+extern crate cf_functions;
+#[cfg(test)]
+extern crate cf_dist_utils;
 
 #[derive(Debug,Deserialize)]
 pub struct Loan {
