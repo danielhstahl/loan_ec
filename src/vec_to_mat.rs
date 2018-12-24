@@ -5,6 +5,7 @@ pub fn get_row_from_index(index:usize, num_row:usize)->usize {
     index%num_row
 }
 
+/*
 pub fn get_element_from_matrix<T>(
     row_num:usize,
     col_num:usize,
@@ -12,7 +13,7 @@ pub fn get_element_from_matrix<T>(
     array:&[T]
 )->&T{
     &array[col_num*num_rows+row_num]
-}
+}*/
 
 
 #[cfg(test)]
@@ -68,7 +69,7 @@ mod tests {
         let result=get_row_from_index(2, 1);
         assert_eq!(result, 0);//zero based
     }
-    #[test]
+    /*#[test]
     fn test_get_two_d_array(){
         let arr=vec![1, 2, 3, 4, 5, 6];
         let num_rows=2;
@@ -83,5 +84,5 @@ mod tests {
             *get_element_from_matrix(
                 row_index_2, col_index_2, num_rows, &arr), 
             3);
-    }
+    }*/
 }

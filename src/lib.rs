@@ -38,45 +38,14 @@ fn default_zero()->f64{
 }
 
 /// Returns increment of expected loss for a given loan
-/// # Examples
-/// ```
-/// let loan = Loan{
-///    balance:1.0,
-///    pd:0.01,
-///    lgd:0.5,
-///    weight:vec![1.0]
-///};
-///let el=get_el_from_loan(&loan, 1.0);
-/// ```
 fn get_el_from_loan(loan:&Loan, w:f64)->f64{
     -loan.lgd*loan.balance*w*loan.pd*loan.num
 }
 /// Returns increment of variance for a given loan
-/// # Examples
-/// ```
-/// let loan = Loan{
-///    balance:1.0,
-///    pd:0.01,
-///    lgd:0.5,
-///    weight:vec![1.0]
-///};
-///let var=get_var_from_loan(&loan, 1.0);
-/// ```
 fn get_var_from_loan(loan:&Loan, w:f64)->f64{
     (1.0+loan.lgd_variance)*(loan.lgd*loan.balance).powi(2)*w*loan.pd*loan.num
 }
 /// Returns incremental "lambda" for a given loan
-/// # Examples
-/// ```
-/// let loan = Loan{
-///    balance:1.0,
-///    pd:0.01,
-///    lgd:0.5,
-///    r:0.5,
-///    weight:vec![1.0]
-///};
-///let lambda=get_lambda_from_loan(&loan);
-/// ```
 fn get_lambda_from_loan(loan:&Loan)->f64{
     loan.balance*loan.r*loan.num
 }
@@ -141,11 +110,14 @@ pub fn risk_contribution(
 /// Returns the variance of a portfolio with liquidity risk
 /// # Examples
 /// ```
+/// extern crate loan_ec;
+/// # fn main(){
 /// let lambda=1.0;
 /// let q=0.01;
 /// let expectation=500.0;
 /// let variance= 5000.0;
-/// let liq_var=variance_liquidity(lambda, q, expectation, variance);
+/// let liq_var=loan_ec::variance_liquidity(lambda, q, expectation, variance);
+/// # }
 /// ```
 pub fn variance_liquidity(
     lambda:f64, //this is the sum of lambda_0 and "lambda" (sum of r_j b_j)
@@ -158,10 +130,13 @@ pub fn variance_liquidity(
 /// Returns the expectation of a portfolio with liquidity risk
 /// # Examples
 /// ```
+/// extern crate loan_ec;
+/// # fn main(){
 /// let lambda=1.0;
 /// let q=0.01;
 /// let expectation=500.0;
-/// let liq_exp=expectation_liquidity(lambda, q, expectation);
+/// let liq_exp=loan_ec::expectation_liquidity(lambda, q, expectation);
+/// # }
 /// ```
 pub fn expectation_liquidity(
     lambda:f64,//this is the sum of lambda_0 and "lambda" (sum of r_j b_j)
@@ -353,7 +328,15 @@ impl EconomicCapitalAttributes {
         let risk_measure=risk_measure_fn(&full_cf);
         let port_expectation=portfolio_expectation(&el_vec, el_sys);
         let port_variance=portfolio_variance(&el_vec, el_sys, &var_vec, var_sys);
-        let c=(risk_measure-port_expectation)/port_variance.sqrt();
+        let liq_expectation=expectation_liquidity(
+            lambda+lambda0, q, 
+            port_expectation
+        );
+        let liq_variance=variance_liquidity(
+            lambda+lambda0, q, 
+            port_expectation, port_variance
+        );
+        let c=(risk_measure-liq_expectation)/liq_variance.sqrt();
         risk_contribution(
             loan, &el_vec, el_sys, &var_vec, 
             var_sys, lambda0, lambda, q, c
@@ -1305,7 +1288,8 @@ mod tests {
             num:num_loans1//homogenous
         };
         discrete_cf.process_loan(&loan1, &u_domain, &log_lpm_cf);
-
+        let systemic_mgf=gamma_mgf(&v);
+        
         let loan2=Loan{
             pd:pd2,
             lgd:lgd2,
@@ -1316,7 +1300,7 @@ mod tests {
             num:num_loans2
         };
 
-        let systemic_mgf=gamma_mgf(&v);
+        
         let quantile=0.01;
         let max_iterations=100;
         let tolerance=0.0001;
@@ -1331,12 +1315,11 @@ mod tests {
             );
             var
         };
-        
         let rc1=discrete_cf.experiment_risk_contribution(
             &loan2, &u_domain, &log_lpm_cf, lambda0, q, 
             &systemic_mgf, &systemic_expectation, &v, &risk_measure_fn
         );
-
+        
         let EconomicCapitalAttributes{
             el_vec, var_vec, lambda:lambda_new, cf, ..
         }=discrete_cf.experiment_loan(&loan2, &u_domain, &log_lpm_cf);
@@ -1360,13 +1343,14 @@ mod tests {
             new_expectation, 
             new_variance
         );
+        let cf_d=discrete_cf.get_experiment_full_cf(&cf, &systemic_mgf);
         let (_es, var)=cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
             quantile, 
             x_min,
             x_max,
             max_iterations,
             tolerance,
-            &cf
+            &cf_d
         );
         let c=(var-liquid_exp)/liquid_var.sqrt();
         assert_abs_diff_eq!(lambda, lambda_new, epsilon=0.0000001);
@@ -1377,6 +1361,7 @@ mod tests {
             &var_vec, &v, lambda0, 
             lambda, q, c
         );
+        
         assert_abs_diff_eq!(
             rc2, 
             rc1, 
