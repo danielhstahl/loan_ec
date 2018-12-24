@@ -1,7 +1,12 @@
 [package]
-name = "credit_faas_demo"
-version = "0.1.0"
+name = "credit_ec"
+version = "0.0.1"
 authors = ["Daniel Stahl <danstahl1138@gmail.com>"]
+homepage = "https://github.com/phillyfan1138/loan_ec"
+repository = "https://github.com/phillyfan1138/loan_ec"
+readme = "README.md"
+license = "MIT"
+description = "A library for providing loan level EC measures."
 
 [dependencies]
 fang_oost = "0.13.7"
@@ -17,10 +22,5 @@ probability = "0.15.12"
 approx = "0.2.0"
 itertools = "0.8"
 
-[[bin]]
-name = "loan_cf"
-path = "src/bin/loan_cf.rs"
-
-[lib]
-name = "utils"
-path = "src/lib/lib.rs"
+[badges]
+travis-ci = { repository = "phillyfan1138/loan_ec" }
