@@ -24,13 +24,15 @@ Create instances of the Loan struct:
 
 ```rust
 extern crate loan_ec;
+//crate is needed for computing the complex domain
+extern crate fang_oost;
 let loan=Loan{
-    balance:1000.0,
-    pd:0.03,
-    lgd:0.5,
+    balance:1000.0, //dollar exposure
+    pd:0.03, //annual probability of default (through the cycle)
+    lgd:0.5,//expected value of loss given default
     weight:vec![0.4, 0.6],//must add to one, represents exposure to macro variables
-    r:0.5,
-    lgd_variance:0.3,
+    r:0.5, //loss in a liquidity event, as a fraction of the balance
+    lgd_variance:0.3,//variance of the loss given default
     num:1000.0//number of loans that have these attributes
 };
 ```
@@ -38,10 +40,12 @@ let loan=Loan{
 Then add to the portfolio:
 
 ```rust
-let num_u:usize=256;//the higher, the more accurate, but the slower it will run
-let x_min=-100000.0;//the minimum of the distribution
+//the higher this number, the more accurate the numerical approximation, but the slower it will run
+let num_u:usize=256;
+//the truncation of the distribution for numerical purposes
+let x_min=-100000.0;
 let x_max=0.0;//the maximum of the distribution
-let mut ec=EconomicCapitalAttributes::new(
+let mut ec=loan_ec::EconomicCapitalAttributes::new(
     num_u, 
     weight.len()
 );
@@ -60,11 +64,12 @@ ec.process_loan(&loan, &u_domain, &log_lpm_cf);
 //keep adding until there are no more loans left...
 ```
 
-Then to do statistics on the portfolio:
+Retrieve the (discretized) characteristic function for the portfolio:
 
 ```rust
 //variance of macro variables
 let variance=vec![0.3, 0.4];
+//in this example, macro variables are Gamma distributed
 let v_mgf=|u_weights:&[Complex<f64>]|->Complex<f64>{
     u_weights.iter().zip(&variance).map(|(u, v)|{
         -(1.0-v*u).ln()/v
@@ -76,11 +81,12 @@ let final_cf:Vec<Complex<f64>>=ec.get_full_cf(&v_mgf);
 Using the characteristic function, obtain any number of metrics including expected shortfall and value at risk (from my [cf_dist_utils](https://github.com/phillyfan1138/cf_dist_utils_rust) repository).
 
 ```rust
+let quantile=0.01;
 let (
-    es, 
-    var
+    expected_shortfall, 
+    value_at_risk
 )=cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
-    0.01, 
+    quantile, 
     x_min,
     x_max,
     max_iterations,
