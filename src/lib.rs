@@ -22,7 +22,7 @@ extern crate fang_oost;
 /// Struct representing loan attributes
 #[derive(Debug, Deserialize)]
 pub struct Loan {
-    pub balance: f64, 
+    pub balance: f64,
     pub pd: f64,
     pub lgd: f64,
     pub weight: Vec<f64>,
@@ -31,7 +31,7 @@ pub struct Loan {
     #[serde(default = "default_zero")]
     pub lgd_variance: f64,
     #[serde(default = "default_one")]
-    pub num: f64
+    pub num: f64,
 }
 
 fn default_one() -> f64 {
@@ -148,10 +148,10 @@ pub fn get_liquidity_risk_fn(lambda: f64, q: f64) -> impl Fn(&Complex<f64>) -> C
     move |u: &Complex<f64>| u - ((-u * lambda).exp() - 1.0) * q
 }
 
-/// Returns a function which is the characteristic exponent 
-/// for a given loan.  The "lgd_cf" argument is the 
-/// characteristic function for a given loan's LGD.  The 
-/// "liquidity_cf" argument is the liquidity function 
+/// Returns a function which is the characteristic exponent
+/// for a given loan.  The "lgd_cf" argument is the
+/// characteristic function for a given loan's LGD.  The
+/// "liquidity_cf" argument is the liquidity function
 /// typically instantiated from "get_liquidity_risk_fn".
 pub fn get_log_lpm_cf<T, U>(
     lgd_cf: T,       // The characteristic function for a given loan's LGD
@@ -167,23 +167,23 @@ where
 }
 
 /// Holds the attributes for the entire
-/// portfolio. The "cf" element holds the 
+/// portfolio. The "cf" element holds the
 /// characteristic function for the portfolio.
-/// The "el_vec" element holds the expected 
-/// value (first moment) vector of length num_w 
-/// for the portfolio. The "var_vec" element 
-/// holds the second moment vector of length 
-/// num_w for the portfolio p_j E[l^2]w_j. The 
-/// "num_w" element holds the number of systemic 
-/// random variables. The "lambda" element holds 
-/// the total liquidity risk for the portfolio 
+/// The "el_vec" element holds the expected
+/// value (first moment) vector of length num_w
+/// for the portfolio. The "var_vec" element
+/// holds the second moment vector of length
+/// num_w for the portfolio p_j E[l^2]w_j. The
+/// "num_w" element holds the number of systemic
+/// random variables. The "lambda" element holds
+/// the total liquidity risk for the portfolio
 /// (derived from each loan).
 pub struct EconomicCapitalAttributes {
     pub cf: Vec<Complex<f64>>,
     pub el_vec: Vec<f64>, // The expected value (first moment) vector of length num_w for the portfolio
     pub var_vec: Vec<f64>, // The second moment vector of length num_w for the portfolio (p_j E[l^2]w_j)
-    pub num_w: usize,     // The number of systemic random variables
-    pub lambda: f64,      // The total liquidity risk for the portfolio (derived from each loan)
+    pub num_w: usize,      // The number of systemic random variables
+    pub lambda: f64,       // The total liquidity risk for the portfolio (derived from each loan)
 }
 /// Computes portfolio expectation given
 /// the incremental vectors of portfolio
@@ -337,7 +337,7 @@ impl EconomicCapitalAttributes {
     /// let loan_ec::EconomicCapitalAttributes{
     ///     cf, el_vec, var_vec, lambda, num_w
     /// }=ec_attributes.experiment_loan(
-    ///     &loan, &u_domain, 
+    ///     &loan, &u_domain,
     ///     &log_lpm_cf
     /// );
     /// # }
@@ -386,13 +386,13 @@ impl EconomicCapitalAttributes {
     /// to provide a simpler API than obtaining the
     /// analytics from "experiment_loan" and running
     /// them through the "risk_contribution" function.
-    /// The "lambda0" argument is the base loss in a 
+    /// The "lambda0" argument is the base loss in a
     /// liquidity event, independent of loan's liquidity.
-    /// The "q" argument is the scalar to adjust the 
-    /// probability of a liquidity event.  Proportional 
-    /// to the probability of a liquidity event. The 
-    /// "mgf_systemic" argument is the moment generating 
-    /// function is likely to be a function of el_sys 
+    /// The "q" argument is the scalar to adjust the
+    /// probability of a liquidity event.  Proportional
+    /// to the probability of a liquidity event. The
+    /// "mgf_systemic" argument is the moment generating
+    /// function is likely to be a function of el_sys
     /// and var_sys.
     /// # Examples
     /// ```
