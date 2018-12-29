@@ -147,15 +147,12 @@ pub fn get_liquidity_risk_fn(lambda: f64, q: f64) -> impl Fn(&Complex<f64>) -> C
     move |u: &Complex<f64>| u - ((-u * lambda).exp() - 1.0) * q
 }
 
-#[cfg(test)]
-fn test_mgf(u_weights: &[Complex<f64>]) -> Complex<f64> {
-    u_weights.iter().sum::<Complex<f64>>().exp()
-}
 /// Returns a function which is the characteristic exponent for a given
-/// loan.
+/// loan.  The "lgd_cf" argument is the characteristic function for a given loan's LGD.
+/// The "liquidity_cf" argument is the liquidity function typically instantiated from "get_liquidity_risk_fn"
 pub fn get_log_lpm_cf<T, U>(
-    lgd_cf: T,
-    liquidity_cf: U,
+    lgd_cf: T,       // The characteristic function for a given loan's LGD
+    liquidity_cf: U, // The liquidity function typically instantiated from "get_liquidity_risk_fn"
 ) -> impl Fn(&Complex<f64>, &Loan) -> Complex<f64>
 where
     T: Fn(&Complex<f64>, f64, f64) -> Complex<f64>,
@@ -166,12 +163,19 @@ where
     }
 }
 
+/// Holds the attributes for the entire
+/// portfolio.  
+/// The "cf" element holds the characteristic function for the portfolio.
+/// The "el_vec" element holds the expected value (first moment) vector of length num_w for the portfolio.
+/// The "var_vec" element holds the second moment vector of length num_w for the portfolio (p_j E[l^2]w_j).
+/// The "num_w" element holds the number of systemic random variables.
+/// The "lambda" element holds the total liquidity risk for the portfolio (derived from each loan)
 pub struct EconomicCapitalAttributes {
     cf: Vec<Complex<f64>>,
-    el_vec: Vec<f64>,  //size num_w
-    var_vec: Vec<f64>, //size num_w
-    num_w: usize,      //num columns
-    lambda: f64,
+    el_vec: Vec<f64>, // The expected value (first moment) vector of length num_w for the portfolio
+    var_vec: Vec<f64>, // The second moment vector of length num_w for the portfolio (p_j E[l^2]w_j)
+    num_w: usize,     // The number of systemic random variables
+    lambda: f64,      // The total liquidity risk for the portfolio (derived from each loan)
 }
 /// Computes portfolio expectation given
 /// the incremental vectors of portfolio
@@ -209,9 +213,9 @@ impl EconomicCapitalAttributes {
         EconomicCapitalAttributes {
             cf: vec![Complex::new(0.0, 0.0); num_u * num_w],
             el_vec: vec![0.0; num_w],
-            var_vec: vec![0.0; num_w], //not true varaince, instead the p_j E[l^2]w_j
-            num_w,                     //num rows
-            lambda: 0.0,               //this is sum of r_j*balance_j
+            var_vec: vec![0.0; num_w],
+            num_w,
+            lambda: 0.0, // This is sum of r_j*balance_j
         }
     }
     #[cfg(test)]
@@ -219,6 +223,7 @@ impl EconomicCapitalAttributes {
         return &self.cf;
     }
     /// Adds a new loan to the portfolio
+    /// Mutates el_vec, var_vec, cf, and lambda
     pub fn process_loan<U>(&mut self, loan: &Loan, u_domain: &[Complex<f64>], log_lpm_cf: U)
     where
         U: Fn(&Complex<f64>, &Loan) -> Complex<f64> + std::marker::Sync + std::marker::Send,
@@ -251,8 +256,8 @@ impl EconomicCapitalAttributes {
     /// Performs marginal analytics for a potential loan
     /// to the portfolio.  The typical use case is for
     /// pricing a new loan that could potentially be added
-    /// to the portfolio.  For a loan already in the portfolio,
-    /// the "process_loan" function should be used.
+    /// to the portfolio.  For a loan is already in the
+    /// portfolio, the "process_loan" function should be used.
     pub fn experiment_loan<U>(
         &self,
         loan: &Loan,
@@ -297,14 +302,17 @@ impl EconomicCapitalAttributes {
     /// to provide a simpler API than obtaining the
     /// analytics from "experiment_loan" and running
     /// them through the "risk_contribution" function.
+    /// The "lambda0" argument is the ase loss in a liquidity event, independent of loan's liquidity.
+    /// The "q" argument is the scalar to adjust the probability of a liquidity event.  Proportional to the probability of a liquidity event.
+    /// The "mgf_systemic" argument is the moment generating function is likely to be a function of el_sys and var_sys.
     pub fn experiment_risk_contribution<U, V, T>(
         &self,
         loan: &Loan,
         u_domain: &[Complex<f64>],
         log_lpm_cf: U,
-        lambda0: f64,
-        q: f64,
-        mgf_systemic: V, //mgf is likely to be a function of el_sys and var_sys.
+        lambda0: f64, // Base loss in a liquidity event, independent of loan's liquidity
+        q: f64, // Scalar to adjust the probability of a liquidity event.  Proportional to the probability of a liquidity event.
+        mgf_systemic: V, // The moment generating function is likely to be a function of el_sys and var_sys.
         el_sys: &[f64],
         var_sys: &[f64],
         risk_measure_fn: T,
@@ -332,14 +340,16 @@ impl EconomicCapitalAttributes {
             loan, &el_vec, el_sys, &var_vec, var_sys, lambda0, lambda, q, c,
         )
     }
-    /// Gets the expected value of the portfolio.
-    /// This should be called after processing
+    /// Gets the expected value of the portfolio
+    /// without liquidity risk.  This should be
+    /// called after processing
     /// all the loans in the portfolio.
     pub fn get_portfolio_expectation(&self, expectation_systemic: &[f64]) -> f64 {
         portfolio_expectation(&self.el_vec, expectation_systemic)
     }
-    /// Gets the variance of the portfolio.
-    /// This should be called after processing
+    /// Gets the variance of the portfolio
+    /// without liquidity risk.  This should
+    /// be called after processing
     /// all the loans in the portfolio.
     pub fn get_portfolio_variance(
         &self,
@@ -353,15 +363,18 @@ impl EconomicCapitalAttributes {
             variance_systemic,
         )
     }
-    /// Gets the discrete characteristic function
-    /// for the portfolio. This should be called
-    /// after processing all the loans in the portfolio.
+    /// Merges the loan exponents with the
+    /// systemic variables moment generating
+    /// function.
     fn get_experiment_full_cf<U>(&self, cf: &[Complex<f64>], mgf: &U) -> Vec<Complex<f64>>
     where
         U: Fn(&[Complex<f64>]) -> Complex<f64> + std::marker::Sync + std::marker::Send,
     {
         cf.par_chunks(self.num_w).map(mgf).collect()
     }
+    /// Gets the discrete characteristic function
+    /// for the portfolio. This should be called
+    /// after processing all the loans in the portfolio.
     pub fn get_full_cf<U>(&self, mgf: &U) -> Vec<Complex<f64>>
     where
         U: Fn(&[Complex<f64>]) -> Complex<f64> + std::marker::Sync + std::marker::Send,
@@ -380,6 +393,11 @@ fn gamma_mgf<'a, 'b: 'a>(variance: &'b [f64]) -> impl Fn(&[Complex<f64>]) -> Com
             .sum::<Complex<f64>>()
             .exp()
     }
+}
+
+#[cfg(test)]
+fn test_mgf(u_weights: &[Complex<f64>]) -> Complex<f64> {
+    u_weights.iter().sum::<Complex<f64>>().exp()
 }
 
 #[cfg(test)]
