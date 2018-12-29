@@ -19,18 +19,19 @@ extern crate cf_functions;
 #[cfg(test)]
 extern crate fang_oost;
 
+/// Struct representing loan attributes
 #[derive(Debug, Deserialize)]
 pub struct Loan {
-    balance: f64,
-    pd: f64,
-    lgd: f64,
-    weight: Vec<f64>,
+    pub balance: f64, 
+    pub pd: f64,
+    pub lgd: f64,
+    pub weight: Vec<f64>,
     #[serde(default = "default_zero")]
-    r: f64, //the amount of liquidity risk
+    pub r: f64, //the amount of liquidity risk
     #[serde(default = "default_zero")]
-    lgd_variance: f64,
+    pub lgd_variance: f64,
     #[serde(default = "default_one")]
-    num: f64,
+    pub num: f64
 }
 
 fn default_one() -> f64 {
@@ -147,9 +148,11 @@ pub fn get_liquidity_risk_fn(lambda: f64, q: f64) -> impl Fn(&Complex<f64>) -> C
     move |u: &Complex<f64>| u - ((-u * lambda).exp() - 1.0) * q
 }
 
-/// Returns a function which is the characteristic exponent for a given
-/// loan.  The "lgd_cf" argument is the characteristic function for a given loan's LGD.
-/// The "liquidity_cf" argument is the liquidity function typically instantiated from "get_liquidity_risk_fn"
+/// Returns a function which is the characteristic exponent 
+/// for a given loan.  The "lgd_cf" argument is the 
+/// characteristic function for a given loan's LGD.  The 
+/// "liquidity_cf" argument is the liquidity function 
+/// typically instantiated from "get_liquidity_risk_fn".
 pub fn get_log_lpm_cf<T, U>(
     lgd_cf: T,       // The characteristic function for a given loan's LGD
     liquidity_cf: U, // The liquidity function typically instantiated from "get_liquidity_risk_fn"
@@ -164,18 +167,23 @@ where
 }
 
 /// Holds the attributes for the entire
-/// portfolio.  
-/// The "cf" element holds the characteristic function for the portfolio.
-/// The "el_vec" element holds the expected value (first moment) vector of length num_w for the portfolio.
-/// The "var_vec" element holds the second moment vector of length num_w for the portfolio (p_j E[l^2]w_j).
-/// The "num_w" element holds the number of systemic random variables.
-/// The "lambda" element holds the total liquidity risk for the portfolio (derived from each loan)
+/// portfolio. The "cf" element holds the 
+/// characteristic function for the portfolio.
+/// The "el_vec" element holds the expected 
+/// value (first moment) vector of length num_w 
+/// for the portfolio. The "var_vec" element 
+/// holds the second moment vector of length 
+/// num_w for the portfolio p_j E[l^2]w_j. The 
+/// "num_w" element holds the number of systemic 
+/// random variables. The "lambda" element holds 
+/// the total liquidity risk for the portfolio 
+/// (derived from each loan).
 pub struct EconomicCapitalAttributes {
-    cf: Vec<Complex<f64>>,
-    el_vec: Vec<f64>, // The expected value (first moment) vector of length num_w for the portfolio
-    var_vec: Vec<f64>, // The second moment vector of length num_w for the portfolio (p_j E[l^2]w_j)
-    num_w: usize,     // The number of systemic random variables
-    lambda: f64,      // The total liquidity risk for the portfolio (derived from each loan)
+    pub cf: Vec<Complex<f64>>,
+    pub el_vec: Vec<f64>, // The expected value (first moment) vector of length num_w for the portfolio
+    pub var_vec: Vec<f64>, // The second moment vector of length num_w for the portfolio (p_j E[l^2]w_j)
+    pub num_w: usize,     // The number of systemic random variables
+    pub lambda: f64,      // The total liquidity risk for the portfolio (derived from each loan)
 }
 /// Computes portfolio expectation given
 /// the incremental vectors of portfolio
@@ -209,6 +217,15 @@ fn portfolio_variance(el_vec: &[f64], el_sys: &[f64], var_vec: &[f64], var_sys: 
 /// Implements economic capital structure
 impl EconomicCapitalAttributes {
     /// Creates a new (base) economic capital struct
+    /// # Examples
+    /// ```
+    /// extern crate loan_ec;
+    /// # fn main(){
+    /// let num_u:usize=100;
+    /// let num_w:usize=3;
+    /// let ec_attributes=loan_ec::EconomicCapitalAttributes::new(num_u, num_w);
+    /// # }
+    /// ```
     pub fn new(num_u: usize, num_w: usize) -> EconomicCapitalAttributes {
         EconomicCapitalAttributes {
             cf: vec![Complex::new(0.0, 0.0); num_u * num_w],
@@ -218,12 +235,41 @@ impl EconomicCapitalAttributes {
             lambda: 0.0, // This is sum of r_j*balance_j
         }
     }
-    #[cfg(test)]
-    pub fn get_cf(&self) -> &Vec<Complex<f64>> {
-        return &self.cf;
-    }
-    /// Adds a new loan to the portfolio
-    /// Mutates el_vec, var_vec, cf, and lambda
+    /// Adds a new loan to the portfolio.
+    /// Mutates el_vec, var_vec, cf, and lambda.
+    /// # Examples
+    /// ```
+    /// extern crate loan_ec;
+    /// extern crate fang_oost;
+    /// extern crate rayon;
+    /// extern crate num_complex;
+    /// use rayon::prelude::*;
+    /// use num_complex::Complex;
+    /// # fn main(){
+    /// let num_u:usize=100;
+    /// let num_w:usize=1;
+    /// let x_min=-5000.0;
+    /// let x_max=0.0;
+    /// let mut ec_attributes=loan_ec::EconomicCapitalAttributes::new(num_u, num_w);
+    /// let loan=loan_ec::Loan{
+    ///     pd: 0.05,
+    ///     lgd: 0.5,
+    ///     lgd_variance: 0.2,
+    ///     balance: 1.0,
+    ///     r: 0.0,
+    ///     weight: vec![1.0],
+    ///     num: 10000.0
+    /// };
+    /// let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(256, x_min, x_max).collect();
+    /// let lambda=1000.0;
+    /// let q=0.0001;
+    /// let liquid_fn = loan_ec::get_liquidity_risk_fn(lambda, q);
+    /// //the exponent is negative because l represents a loss
+    /// let lgd_fn = |u: &Complex<f64>, l: f64, _lgd_v: f64| (-u * l).exp();
+    /// let log_lpm_cf = loan_ec::get_log_lpm_cf(&lgd_fn, &liquid_fn);
+    /// ec_attributes.process_loan(&loan, &u_domain, &log_lpm_cf);
+    /// # }
+    /// ```
     pub fn process_loan<U>(&mut self, loan: &Loan, u_domain: &[Complex<f64>], log_lpm_cf: U)
     where
         U: Fn(&Complex<f64>, &Loan) -> Complex<f64> + std::marker::Sync + std::marker::Send,
@@ -258,6 +304,44 @@ impl EconomicCapitalAttributes {
     /// pricing a new loan that could potentially be added
     /// to the portfolio.  For a loan is already in the
     /// portfolio, the "process_loan" function should be used.
+    /// # Examples
+    /// ```
+    /// extern crate loan_ec;
+    /// extern crate fang_oost;
+    /// extern crate rayon;
+    /// extern crate num_complex;
+    /// use rayon::prelude::*;
+    /// use num_complex::Complex;
+    /// # fn main(){
+    /// let num_u:usize=100;
+    /// let num_w:usize=1;
+    /// let x_min=-5000.0;
+    /// let x_max=0.0;
+    /// let q=0.0001;
+    /// let lambda=1000.0;
+    /// let mut ec_attributes=loan_ec::EconomicCapitalAttributes::new(num_u, num_w);
+    /// let loan=loan_ec::Loan{
+    ///     pd: 0.05,
+    ///     lgd: 0.5,
+    ///     lgd_variance: 0.2,
+    ///     balance: 1.0,
+    ///     r: 0.0,
+    ///     weight: vec![1.0],
+    ///     num: 10000.0
+    /// };
+    /// let liquid_fn = loan_ec::get_liquidity_risk_fn(lambda, q);
+    /// let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
+    /// let lgd_fn = |u: &Complex<f64>, l: f64, _lgd_v: f64| (-u * l).exp();
+    /// let log_lpm_cf = loan_ec::get_log_lpm_cf(&lgd_fn, &liquid_fn);
+    /// ec_attributes.process_loan(&loan, &u_domain, &log_lpm_cf);
+    /// let loan_ec::EconomicCapitalAttributes{
+    ///     cf, el_vec, var_vec, lambda, num_w
+    /// }=ec_attributes.experiment_loan(
+    ///     &loan, &u_domain, 
+    ///     &log_lpm_cf
+    /// );
+    /// # }
+    /// ```
     pub fn experiment_loan<U>(
         &self,
         loan: &Loan,
@@ -302,9 +386,83 @@ impl EconomicCapitalAttributes {
     /// to provide a simpler API than obtaining the
     /// analytics from "experiment_loan" and running
     /// them through the "risk_contribution" function.
-    /// The "lambda0" argument is the ase loss in a liquidity event, independent of loan's liquidity.
-    /// The "q" argument is the scalar to adjust the probability of a liquidity event.  Proportional to the probability of a liquidity event.
-    /// The "mgf_systemic" argument is the moment generating function is likely to be a function of el_sys and var_sys.
+    /// The "lambda0" argument is the base loss in a 
+    /// liquidity event, independent of loan's liquidity.
+    /// The "q" argument is the scalar to adjust the 
+    /// probability of a liquidity event.  Proportional 
+    /// to the probability of a liquidity event. The 
+    /// "mgf_systemic" argument is the moment generating 
+    /// function is likely to be a function of el_sys 
+    /// and var_sys.
+    /// # Examples
+    /// ```
+    /// extern crate loan_ec;
+    /// extern crate fang_oost;
+    /// extern crate rayon;
+    /// extern crate num_complex;
+    /// use rayon::prelude::*;
+    /// use num_complex::Complex;
+    /// extern crate cf_dist_utils;
+    /// # fn main(){
+    /// let num_u:usize=100;
+    /// let num_w:usize=1;
+    /// let x_min=-5000.0;
+    /// let x_max=0.0;
+    /// let mut ec_attributes=loan_ec::EconomicCapitalAttributes::new(num_u, num_w);
+    /// let loan=loan_ec::Loan{
+    ///     pd: 0.05,
+    ///     lgd: 0.5,
+    ///     lgd_variance: 0.2,
+    ///     balance: 1.0,
+    ///     r: 0.0,
+    ///     weight: vec![1.0],
+    ///     num: 10000.0
+    /// };
+    /// let lambda=1000.0;
+    /// let q=0.0001;
+    /// let liquid_fn = loan_ec::get_liquidity_risk_fn(lambda, q);
+    /// let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
+    /// let lgd_fn = |u: &Complex<f64>, l: f64, _lgd_v: f64| (-u * l).exp();
+    /// let log_lpm_cf = loan_ec::get_log_lpm_cf(&lgd_fn, &liquid_fn);
+    /// ec_attributes.process_loan(&loan, &u_domain, &log_lpm_cf);
+    /// let systemic_expectation = vec![1.0];
+    /// let v = vec![0.4];
+    /// let lambda0=1000.0;
+    /// let q=0.0001;
+    /// let quantile=0.01;
+    /// let systemic_mgf=|u_weights: &[Complex<f64>]| -> Complex<f64> {
+    ///     u_weights
+    ///     .iter()
+    ///     .zip(&v)
+    ///     .map(|(u, v_inst)| -(1.0 - v_inst * u).ln() / v_inst)
+    ///     .sum::<Complex<f64>>()
+    ///     .exp()
+    /// };
+    /// let max_iterations = 100;
+    /// let tolerance = 0.0001;
+    /// let risk_measure_fn = |final_cf: &[Complex<f64>]| {
+    ///     let (_es, var) = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+    ///         quantile,
+    ///         x_min,
+    ///         x_max,
+    ///         max_iterations,
+    ///         tolerance,
+    ///         final_cf,
+    ///     );  
+    ///     var
+    /// };
+    /// let rc = ec_attributes.experiment_risk_contribution(
+    ///     &loan,
+    ///     &u_domain,
+    ///     &log_lpm_cf,
+    ///     lambda0,
+    ///     q,
+    ///     &systemic_mgf,
+    ///     &systemic_expectation,
+    ///     &v,
+    ///     &risk_measure_fn,
+    /// );
+    /// # }
     pub fn experiment_risk_contribution<U, V, T>(
         &self,
         loan: &Loan,
@@ -344,6 +502,41 @@ impl EconomicCapitalAttributes {
     /// without liquidity risk.  This should be
     /// called after processing
     /// all the loans in the portfolio.
+    /// # Examples
+    /// ```
+    /// extern crate loan_ec;
+    /// extern crate fang_oost;
+    /// extern crate rayon;
+    /// extern crate num_complex;
+    /// use rayon::prelude::*;
+    /// use num_complex::Complex;
+    /// extern crate cf_dist_utils;
+    /// # fn main(){
+    /// let num_u:usize=100;
+    /// let num_w:usize=1;
+    /// let x_min=-5000.0;
+    /// let x_max=0.0;
+    /// let expectation=vec![1.0];
+    /// let lambda=1000.0;
+    /// let q=0.0001;
+    /// let liquid_fn = loan_ec::get_liquidity_risk_fn(lambda, q);
+    /// //the exponent is negative because l represents a loss
+    /// let lgd_fn = |u: &Complex<f64>, l: f64, _lgd_v: f64| (-u * l).exp();
+    /// let log_lpm_cf = loan_ec::get_log_lpm_cf(&lgd_fn, &liquid_fn);
+    /// let mut ec_attributes=loan_ec::EconomicCapitalAttributes::new(num_u, num_w);
+    /// let loan=loan_ec::Loan{
+    ///     pd: 0.05,
+    ///     lgd: 0.5,
+    ///     lgd_variance: 0.2,
+    ///     balance: 1.0,
+    ///     r: 0.0,
+    ///     weight: vec![1.0],
+    ///     num: 10000.0
+    /// };
+    /// let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
+    /// ec_attributes.process_loan(&loan, &u_domain, &log_lpm_cf);
+    /// let expectation_portfolio=ec_attributes.get_portfolio_expectation(&expectation);
+    /// # }
     pub fn get_portfolio_expectation(&self, expectation_systemic: &[f64]) -> f64 {
         portfolio_expectation(&self.el_vec, expectation_systemic)
     }
@@ -351,6 +544,41 @@ impl EconomicCapitalAttributes {
     /// without liquidity risk.  This should
     /// be called after processing
     /// all the loans in the portfolio.
+    /// # Examples
+    /// ```
+    /// extern crate loan_ec;
+    /// extern crate fang_oost;
+    /// extern crate rayon;
+    /// extern crate num_complex;
+    /// use num_complex::Complex;
+    /// use rayon::prelude::*;
+    /// # fn main(){
+    /// let num_u:usize=100;
+    /// let num_w:usize=1;
+    /// let x_min=-5000.0;
+    /// let x_max=0.0;
+    /// let systemic_expectation = vec![1.0];
+    /// let v = vec![0.4];
+    /// let mut ec_attributes=loan_ec::EconomicCapitalAttributes::new(num_u, num_w);
+    /// let loan=loan_ec::Loan{
+    ///     pd: 0.05,
+    ///     lgd: 0.5,
+    ///     lgd_variance: 0.2,
+    ///     balance: 1.0,
+    ///     r: 0.0,
+    ///     weight: vec![1.0],
+    ///     num: 10000.0
+    /// };
+    /// let lambda=1000.0;
+    /// let q=0.0001;
+    /// let liquid_fn = loan_ec::get_liquidity_risk_fn(lambda, q);
+    /// //the exponent is negative because l represents a loss
+    /// let lgd_fn = |u: &Complex<f64>, l: f64, _lgd_v: f64| (-u * l).exp();
+    /// let log_lpm_cf = loan_ec::get_log_lpm_cf(&lgd_fn, &liquid_fn);
+    /// let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
+    /// ec_attributes.process_loan(&loan, &u_domain, &log_lpm_cf);
+    /// let variance_portfolio=ec_attributes.get_portfolio_variance(&systemic_expectation, &v);
+    /// # }
     pub fn get_portfolio_variance(
         &self,
         expectation_systemic: &[f64],
@@ -375,6 +603,50 @@ impl EconomicCapitalAttributes {
     /// Gets the discrete characteristic function
     /// for the portfolio. This should be called
     /// after processing all the loans in the portfolio.
+    /// # Examples
+    /// ```
+    /// extern crate loan_ec;
+    /// extern crate fang_oost;
+    /// extern crate rayon;
+    /// extern crate num_complex;
+    /// use rayon::prelude::*;
+    /// use num_complex::Complex;
+    /// extern crate cf_dist_utils;
+    /// # fn main(){
+    /// let num_u:usize=100;
+    /// let num_w:usize=1;
+    /// let x_min=-5000.0;
+    /// let x_max=0.0;
+    /// let systemic_expectation = vec![1.0];
+    /// let v = vec![0.4];
+    /// let lambda=1000.0;
+    /// let q=0.0001;
+    /// let liquid_fn = loan_ec::get_liquidity_risk_fn(lambda, q);
+    /// //the exponent is negative because l represents a loss
+    /// let lgd_fn = |u: &Complex<f64>, l: f64, _lgd_v: f64| (-u * l).exp();
+    /// let log_lpm_cf = loan_ec::get_log_lpm_cf(&lgd_fn, &liquid_fn);
+    /// let mut ec_attributes=loan_ec::EconomicCapitalAttributes::new(num_u, num_w);
+    /// let systemic_mgf=|u_weights: &[Complex<f64>]| -> Complex<f64> {
+    ///     u_weights
+    ///     .iter()
+    ///     .zip(&v)
+    ///     .map(|(u, v_inst)| -(1.0 - v_inst * u).ln() / v_inst)
+    ///     .sum::<Complex<f64>>()
+    ///     .exp()
+    /// };
+    /// let loan=loan_ec::Loan{
+    ///     pd: 0.05,
+    ///     lgd: 0.5,
+    ///     lgd_variance: 0.2,
+    ///     balance: 1.0,
+    ///     r: 0.0,
+    ///     weight: vec![1.0],
+    ///     num: 10000.0
+    /// };
+    /// let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
+    /// ec_attributes.process_loan(&loan, &u_domain, &log_lpm_cf);
+    /// let cf=ec_attributes.get_full_cf(&systemic_mgf);
+    /// # }
     pub fn get_full_cf<U>(&self, mgf: &U) -> Vec<Complex<f64>>
     where
         U: Fn(&[Complex<f64>]) -> Complex<f64> + std::marker::Sync + std::marker::Send,
@@ -406,7 +678,7 @@ mod tests {
     #[test]
     fn construct_hold_discrete_cf() {
         let discrete_cf = EconomicCapitalAttributes::new(256, 3);
-        let cf = discrete_cf.get_cf();
+        let cf = discrete_cf.cf;
         assert_eq!(cf.len(), 256 * 3);
         assert_eq!(cf[0], Complex::new(0.0, 0.0)); //first three should be the same "u"
         assert_eq!(cf[1], Complex::new(0.0, 0.0));
@@ -427,7 +699,7 @@ mod tests {
         let log_lpm_cf = |_u: &Complex<f64>, _loan: &Loan| Complex::new(1.0, 0.0);
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(256, 0.0, 1.0).collect();
         discrete_cf.process_loan(&loan, &u_domain, &log_lpm_cf);
-        let cf = discrete_cf.get_cf();
+        let cf = discrete_cf.cf;
         assert_eq!(cf.len(), 256 * 3);
         cf.iter().for_each(|cf_el| {
             assert_eq!(cf_el, &Complex::new(0.5 as f64, 0.0 as f64));
