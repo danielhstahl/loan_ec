@@ -1,4 +1,6 @@
-//! Economic capital for a loan portfolio.  Based on https://github.com/phillyfan1138/CreditRiskExtensions/blob/master/StahlMultiVariatePaper.pdf.
+//! Economic capital for a loan portfolio.  
+//! Based on [my paper](https://github.com/phillyfan1138/CreditRiskExtensions/blob/master/StahlMultiVariatePaper.pdf)
+//! on credit economic capital.
 //!
 extern crate num_complex;
 extern crate rayon;
@@ -67,7 +69,7 @@ fn default_zero() -> f64 {
 ///
 /// # Arguments
 ///
-/// * `loan` - An instance of the Loan struct
+/// * `loan` - An instance of the [Loan](struct.Loan.html) struct
 /// * `w` - A single element from the weight
 /// vector in the Loan struct.
 fn get_el_from_loan(loan: &Loan, w: f64) -> f64 {
@@ -80,7 +82,7 @@ fn get_el_from_loan(loan: &Loan, w: f64) -> f64 {
 ///
 /// # Arguments
 ///
-/// * `loan` - An instance of the Loan struct
+/// * `loan` - An instance of the [Loan](struct.Loan.html) struct
 /// * `w` - A single element from the weight
 /// vector in the Loan struct.
 fn get_var_from_loan(loan: &Loan, w: f64) -> f64 {
@@ -90,14 +92,18 @@ fn get_var_from_loan(loan: &Loan, w: f64) -> f64 {
 ///
 /// # Arguments
 ///
-/// * `loan` - An instance of the Loan struct
+/// * `loan` - An instance of the [Loan](struct.Loan.html) struct
 fn get_lambda_from_loan(loan: &Loan) -> f64 {
     loan.balance * loan.r * loan.num
 }
-/// Returns risk contribution for a given loan
+/// Returns risk contribution for a given loan.  This
+/// function is used by
+/// [experiment_risk_contribution](struct.EconomicCapitalAttributes.html#method.experiment_risk_contribution)
+/// but can also be used on its own.  
+///
 /// # Arguments
 ///
-/// * `loan` - An instance of the Loan struct
+/// * `loan` - An instance of the [Loan](struct.Loan.html) struct
 /// * `el_vec` - The portfolio vector of expected
 /// loss.  Has the same size as the weight vector
 /// in the Loan struct.
@@ -118,7 +124,7 @@ fn get_lambda_from_loan(loan: &Loan) -> f64 {
 /// * `c` - Scalar for multiplying the covariance
 /// for the risk contribution when using the
 /// variance risk measure.  Typically
-/// (rho(X)-E[X])/sqrt(Var(X)) where rho is the
+/// (rho(X)-E\[X\])/sqrt(Var(X)) where rho is the
 /// value of the portfolio risk measure (eg, VaR).
 pub fn risk_contribution(
     loan: &Loan,
@@ -168,18 +174,22 @@ pub fn risk_contribution(
             - expectation_total * var_el_total)
             / standard_deviation
 }
-/// Returns the variance of a portfolio with liquidity risk
+/// Returns the variance of a portfolio with liquidity risk.
 ///
 /// # Arguments
 ///
-/// * `lambda` - Sum of lambda0 and "lambda" (sum of
-/// r*balance over all loans).
-/// * `q` - Probability of liquidity event (scaled
-/// by the total portfolio loss).
+/// * `lambda` - Sum of lambda0 (base loss in liquidity event)
+/// and the lambda element from the [Loan](struct.Loan.html) struct.
+/// * `q` - Probability of liquidity event scaled
+/// by the total portfolio loss.
 /// * `expectation` - Base expectation for the portfolio
-/// without liquidity risk.
+/// without liquidity risk.  Can be computed using the
+/// [get_portfolio_expectation](struct.EconomicCapitalAttributes.html#method.get_portfolio_expectation)
+/// method.
 /// * `variance` - Base variance for the portfolio
-/// without liquidity risk.
+/// without liquidity risk.  Can be computed using the
+/// [get_portfolio_variance](struct.EconomicCapitalAttributes.html#method.get_portfolio_variance)
+/// method.
 ///
 /// # Examples
 /// ```
@@ -199,12 +209,14 @@ pub fn variance_liquidity(lambda: f64, q: f64, expectation: f64, variance: f64) 
 ///
 /// # Arguments
 ///
-/// * `lambda` - Sum of lambda0 and "lambda" (sum of
-/// r*balance over all loans).
+/// * `lambda` - Sum of lambda0 (base loss in liquidity event)
+/// and the lambda element from the [Loan](struct.Loan.html) struct.
 /// * `q` - Probability of liquidity event (scaled
 /// by the total portfolio loss).
 /// * `expectation` - Base expectation for the portfolio
-/// without liquidity risk.
+/// without liquidity risk.  Can be computed using the
+/// [get_portfolio_expectation](struct.EconomicCapitalAttributes.html#method.get_portfolio_expectation)
+/// method.
 ///
 /// # Examples
 /// ```
@@ -226,8 +238,8 @@ pub fn expectation_liquidity(lambda: f64, q: f64, expectation: f64) -> f64 {
 ///
 /// # Arguments
 ///
-/// * `lambda` - Sum of lambda0 and "lambda" (sum of
-/// r*balance over all loans).
+/// * `lambda` - Sum of lambda0 (base loss in liquidity event)
+/// and the lambda element from the [Loan](struct.Loan.html) struct.
 /// * `q` - Probability of liquidity event (scaled
 /// by the total portfolio loss).
 pub fn get_liquidity_risk_fn(lambda: f64, q: f64) -> impl Fn(&Complex<f64>) -> Complex<f64> {
@@ -235,14 +247,16 @@ pub fn get_liquidity_risk_fn(lambda: f64, q: f64) -> impl Fn(&Complex<f64>) -> C
 }
 
 /// Returns a function which is the characteristic exponent
-/// for a given loan.  
+/// for a given loan.  The result of this function is used
+/// as the third argument in
+/// [process_loan](struct.EconomicCapitalAttributes.html#method.process_loan).
 ///
 /// # Arguments
 ///
 /// * `lgd_cf` - The characteristic function for a given
 /// loan's loss given default.
 /// * `liquidity_cf` - The liquidity function typically
-/// instantiated from "get_liquidity_risk_fn"
+/// instantiated from [get_liquidity_risk_fn](fn.get_liquidity_risk_fn.html).
 pub fn get_log_lpm_cf<T, U>(
     lgd_cf: T,
     liquidity_cf: U,
@@ -261,6 +275,9 @@ where
 pub struct EconomicCapitalAttributes {
     /// Holds the characteristic function for the portfolio
     /// (without multiplying by the systemic variables).
+    /// The only use case for this element is when used as
+    /// an input into
+    /// [get_experiment_full_cf](struct.EconomicCapitalAttributes.html#method.get_experiment_full_cf).
     pub cf: Vec<Complex<f64>>,
     /// The expected value (first moment) vector of length
     /// num_w for the portfolio.
@@ -283,10 +300,12 @@ pub struct EconomicCapitalAttributes {
 ///
 /// * `el_vec` - The portfolio vector of expected
 /// loss.  Has the same size as the weight vector
-/// in the Loan struct.
+/// in the [Loan](struct.Loan.html) struct.
 /// * `el_sys` - The vector of expected values for
 /// the systemic random variables.  This is
-/// typically a vector of ones.
+/// typically a vector of ones.  Has the same size
+/// as the weight vector in the
+/// [Loan](struct.Loan.html) struct.
 fn portfolio_expectation(el_vec: &[f64], el_sys: &[f64]) -> f64 {
     el_vec
         .iter()
@@ -305,15 +324,19 @@ fn portfolio_expectation(el_vec: &[f64], el_sys: &[f64]) -> f64 {
 ///
 /// * `el_vec` - The portfolio vector of expected
 /// loss.  Has the same size as the weight vector
-/// in the Loan struct.
+/// in the [Loan](struct.Loan.html) struct.
 /// * `el_sys` - The vector of expected values for
 /// the systemic random variables.  This is
-/// typically a vector of ones.
+/// typically a vector of ones.  Has the same size
+/// as the weight vector in the
+/// [Loan](struct.Loan.html) struct.
 /// * `var_vec` - The portfolio vector of
 /// variance.  Has the same size as the weight
-/// vector in the Loan struct.
+/// vector in the [Loan](struct.Loan.html) struct.
 /// * `var_sys` - The vector of variances for the
-/// systemic random variables.
+/// systemic random variables.  Has the same size
+/// as the weight vector in the
+/// [Loan](struct.Loan.html) struct.
 fn portfolio_variance(el_vec: &[f64], el_sys: &[f64], var_vec: &[f64], var_sys: &[f64]) -> f64 {
     let v_p: f64 = var_vec
         .iter()
@@ -353,13 +376,14 @@ impl EconomicCapitalAttributes {
     ///
     /// # Arguments
     ///
-    /// * `loan` - An instance of the Loan struct
+    /// * `loan` - An instance of the [Loan](struct.Loan.html) struct.
     /// * `u_domain` - The vector of complex values
     /// provided to the characteristic function.  Is
-    /// typically generated by the fang_oost
+    /// typically generated by the
+    /// [fang_oost](https://github.com/phillyfan1138/fang_oost_rust)
     /// repository.  See the example.
     /// * `log_lpm_cf` - The result from calling
-    /// "get_log_lpm_cf".
+    /// [get_log_lpm_cf](fn.get_log_lpm_cf.html).
     ///
     /// # Examples
     /// ```
@@ -427,17 +451,21 @@ impl EconomicCapitalAttributes {
     /// to the portfolio.  The typical use case is for
     /// pricing a new loan that could potentially be added
     /// to the portfolio.  For a loan is already in the
-    /// portfolio, the "process_loan" function should be used.
+    /// portfolio, the
+    /// [process_loan](struct.EconomicCapitalAttributes.html#method.process_loan)
+    /// method should be used.
     ///
     /// # Arguments
     ///
-    /// * `loan` - An instance of the Loan struct
+    /// * `loan` - An instance of the [Loan](struct.Loan.html)
+    /// struct.  This is the loan to experiment on.  
     /// * `u_domain` - The vector of complex values
     /// provided to the characteristic function.  Is
-    /// typically generated by the fang_oost
+    /// typically generated by the
+    /// [fang_oost](https://github.com/phillyfan1138/fang_oost_rust)
     /// repository.  See the example.
     /// * `log_lpm_cf` - The result from calling
-    /// "get_log_lpm_cf".
+    /// [get_log_lpm_cf](fn.get_log_lpm_cf.html).
     ///
     /// # Examples
     /// ```
@@ -517,27 +545,31 @@ impl EconomicCapitalAttributes {
         }
     }
     /// Finds the risk contribution of a new loan.
-    /// This can be called instead of experiment loan
-    /// to provide a simpler API than obtaining the
-    /// analytics from "experiment_loan" and running
-    /// them through the "risk_contribution" function.
+    /// This provides a simpler API than obtaining
+    /// the results from
+    /// [experiment_loan](struct.EconomicCapitalAttributes.html#method.experiment_loan)
+    /// and running them through the
+    /// [risk_contribution](fn.risk_contribution.html)
+    /// function.
     ///
     /// # Arguments
     ///
-    /// * `loan` - An instance of the Loan struct
+    /// * `loan` - An instance of the [Loan](struct.Loan.html) struct.  
+    /// This is the loan to experiment on.
     /// * `u_domain` - The vector of complex values
     /// provided to the characteristic function.  Is
-    /// typically generated by the fang_oost
+    /// typically generated by the
+    /// [fang_oost](https://github.com/phillyfan1138/fang_oost_rust)
     /// repository.  See the example.
     /// * `log_lpm_cf` - The result from calling
-    /// "get_log_lpm_cf".
+    /// [get_log_lpm_cf](fn.get_log_lpm_cf.html).
     /// * `lambda0` - Base loss (in dollars) from a
     /// liquidity event.  A positive number.
     /// * `q` - Probability of liquidity event (scaled
     /// by the total portfolio loss).
     /// * `mgf_systemic` - Moment generating function
-    /// for the systemic random variables.  Likely to
-    /// be a function of el_sys and var_sys.
+    /// for the systemic random variables.  Typically
+    /// a function of el_sys and var_sys.
     /// * `el_sys` - The vector of expected values for
     /// the systemic random variables.  This is
     /// typically a vector of ones.
@@ -651,7 +683,16 @@ impl EconomicCapitalAttributes {
     /// Gets the expected value of the portfolio
     /// without liquidity risk.  This should be
     /// called after processing
-    /// all the loans in the portfolio.
+    /// all the loans in the portfolio.  The
+    /// result of this function can be used as
+    /// the third argument in
+    /// [expectation_liquidity](fn.expectation_liquidity.html)
+    /// to obtain the expectation with liquidity
+    /// risk.  The result of this function can be
+    /// used as the third argument in
+    /// [variance_liquidity](fn.variance_liquidity.html)
+    /// to obtain the variance with liquidity
+    /// risk.
     ///
     /// # Arguments
     ///
@@ -701,7 +742,11 @@ impl EconomicCapitalAttributes {
     /// without liquidity risk.  This should
     /// be called after processing
     /// all the loans in the portfolio.
-    ///
+    /// The result of this function can be
+    /// used as the fourth argument in
+    /// [variance_liquidity](fn.variance_liquidity.html)
+    /// to obtain the variance with liquidity
+    /// risk.
     /// # Arguments
     ///
     /// * `el_sys` - The vector of expected values for
@@ -750,8 +795,17 @@ impl EconomicCapitalAttributes {
     }
     /// Merges the loan exponents with the
     /// systemic variables moment generating
-    /// function.
-    fn get_experiment_full_cf<U>(&self, cf: &[Complex<f64>], mgf: &U) -> Vec<Complex<f64>>
+    /// function to obtain the discrete
+    /// characteristic function for the
+    /// portfolio.  This should be called
+    /// after obtaining the cf element from
+    /// an
+    /// [experiment](struct.EconomicCapitalAttributes.html#method.experiment_loan).
+    /// If only the risk contribution is
+    /// required, consider using the
+    /// [experiment_risk_contribution](struct.EconomicCapitalAttributes.html#method.experiment_risk_contribution)
+    /// method instead.
+    pub fn get_experiment_full_cf<U>(&self, cf: &[Complex<f64>], mgf: &U) -> Vec<Complex<f64>>
     where
         U: Fn(&[Complex<f64>]) -> Complex<f64> + std::marker::Sync + std::marker::Send,
     {
@@ -764,8 +818,8 @@ impl EconomicCapitalAttributes {
     /// # Arguments
     ///
     /// * `mgf_systemic` - Moment generating function
-    /// for the systemic random variables.  Likely to
-    /// be a function of el_sys and var_sys.
+    /// for the systemic random variables.  Typically
+    /// a function of el_sys and var_sys.
     ///
     /// # Examples
     /// ```

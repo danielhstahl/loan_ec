@@ -15,7 +15,7 @@ This library has a relatively opinionated API for creating a portfolio of loans 
 
 Add the following to your Cargo.toml:
 
-`loan_ec = "0.1.2"`
+`loan_ec = "0.1.3"`
 
 ## Use
 A full example is in the [credit_faas_demo](https://github.com/phillyfan1138/credit_faas_demo).
@@ -26,7 +26,7 @@ Create instances of the Loan struct:
 extern crate loan_ec;
 //crate is needed for computing the complex domain
 extern crate fang_oost;
-let loan=Loan{
+let loan=loan_ec::Loan{
     balance:1000.0, //dollar exposure
     pd:0.03, //annualized probability of default
     lgd:0.5,//expected value of loss given default
@@ -68,7 +68,7 @@ Retrieve the (discretized) characteristic function for the portfolio:
 
 ```rust
 //variance of macro variables
-let variance=vec![0.3, 0.4];
+let variance=vec![0.3, 0.4]; //must have same length as the weight vector
 //in this example, macro variables are Gamma distributed
 let v_mgf=|u_weights:&[Complex<f64>]|->Complex<f64>{
     u_weights.iter().zip(&variance).map(|(u, v)|{
