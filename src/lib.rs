@@ -235,10 +235,7 @@ pub fn get_liquidity_risk_fn(lambda: f64, q: f64) -> impl Fn(&Complex<f64>) -> C
 }
 
 /// Returns a function which is the characteristic exponent
-/// for a given loan.  The "lgd_cf" argument is the
-/// characteristic function for a given loan's LGD.  The
-/// "liquidity_cf" argument is the liquidity function
-/// typically instantiated from "get_liquidity_risk_fn".
+/// for a given loan.  
 ///
 /// # Arguments
 ///
@@ -260,17 +257,7 @@ where
 }
 
 /// Holds the attributes for the entire
-/// portfolio. The "cf" element holds the
-/// characteristic function for the portfolio.
-/// The "el_vec" element holds the expected
-/// value (first moment) vector of length num_w
-/// for the portfolio. The "var_vec" element
-/// holds the second moment vector of length
-/// num_w for the portfolio p_j E[l^2]w_j. The
-/// "num_w" element holds the number of systemic
-/// random variables. The "lambda" element holds
-/// the total liquidity risk for the portfolio
-/// (derived from each loan).
+/// portfolio.
 pub struct EconomicCapitalAttributes {
     /// Holds the characteristic function for the portfolio
     /// (without multiplying by the systemic variables).
@@ -534,14 +521,6 @@ impl EconomicCapitalAttributes {
     /// to provide a simpler API than obtaining the
     /// analytics from "experiment_loan" and running
     /// them through the "risk_contribution" function.
-    /// The "lambda0" argument is the base loss in a
-    /// liquidity event, independent of loan's liquidity.
-    /// The "q" argument is the scalar to adjust the
-    /// probability of a liquidity event.  Proportional
-    /// to the probability of a liquidity event. The
-    /// "mgf_systemic" argument is the moment generating
-    /// function is likely to be a function of el_sys
-    /// and var_sys.
     ///
     /// # Arguments
     ///
