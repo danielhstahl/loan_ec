@@ -15,7 +15,7 @@ This library has a relatively opinionated API for creating a portfolio of loans 
 
 Add the following to your Cargo.toml:
 
-`loan_ec = "0.1.0"`
+`loan_ec = "0.1.1"`
 
 ## Use
 A full example is in the [credit_faas_demo](https://github.com/phillyfan1138/credit_faas_demo).
@@ -28,7 +28,7 @@ extern crate loan_ec;
 extern crate fang_oost;
 let loan=Loan{
     balance:1000.0, //dollar exposure
-    pd:0.03, //annual probability of default (through the cycle)
+    pd:0.03, //annualized probability of default
     lgd:0.5,//expected value of loss given default
     weight:vec![0.4, 0.6],//must add to one, represents exposure to macro variables
     r:0.5, //loss in a liquidity event, as a fraction of the balance
