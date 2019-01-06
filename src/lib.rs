@@ -362,7 +362,7 @@ impl EconomicCapitalAttributes {
     /// let ec_attributes=loan_ec::EconomicCapitalAttributes::new(num_u, num_w);
     /// # }
     /// ```
-    pub fn new(num_u: usize, num_w: usize) -> EconomicCapitalAttributes {
+    pub fn new(num_u: usize, num_w: usize) -> Self {
         EconomicCapitalAttributes {
             cf: vec![Complex::new(0.0, 0.0); num_u * num_w],
             el_vec: vec![0.0; num_w],
