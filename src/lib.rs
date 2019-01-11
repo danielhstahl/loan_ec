@@ -630,7 +630,7 @@ impl EconomicCapitalAttributes {
     ///         max_iterations,
     ///         tolerance,
     ///         final_cf,
-    ///     );  
+    ///     ).unwrap();  
     ///     var
     /// };
     /// let rc = ec_attributes.experiment_risk_contribution(
@@ -708,7 +708,6 @@ impl EconomicCapitalAttributes {
     /// extern crate num_complex;
     /// use rayon::prelude::*;
     /// use num_complex::Complex;
-    /// extern crate cf_dist_utils;
     /// # fn main(){
     /// let num_u:usize=100;
     /// let num_w:usize=1;
@@ -982,7 +981,7 @@ mod tests {
             max_iterations,
             tolerance,
             &final_cf,
-        );
+        ).unwrap();
         assert!(es > var);
     }
     #[test]
@@ -1703,7 +1702,7 @@ mod tests {
                 max_iterations,
                 tolerance,
                 final_cf,
-            );
+            ).unwrap();
             var
         };
         let rc1 = discrete_cf.experiment_risk_contribution(
@@ -1738,7 +1737,7 @@ mod tests {
             max_iterations,
             tolerance,
             &cf_d,
-        );
+        ).unwrap();
         let c = (var - liquid_exp) / liquid_var.sqrt();
         assert_abs_diff_eq!(lambda, lambda_new, epsilon = 0.0000001);
 
