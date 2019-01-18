@@ -15,7 +15,7 @@ This library has a relatively opinionated API for creating a portfolio of loans 
 
 Add the following to your Cargo.toml:
 
-`loan_ec = "0.1.3"`
+`loan_ec = "0.1.4"`
 
 ## Use
 A full example is in the [credit_faas_demo](https://github.com/phillyfan1138/credit_faas_demo).
@@ -92,7 +92,7 @@ let (
     max_iterations,
     tolerance,
     &final_cf
-);
+).unwrap();
 ```
 
 

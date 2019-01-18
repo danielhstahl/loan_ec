@@ -623,15 +623,15 @@ impl EconomicCapitalAttributes {
     /// let max_iterations = 100;
     /// let tolerance = 0.0001;
     /// let risk_measure_fn = |final_cf: &[Complex<f64>]| {
-    ///     let (_es, var) = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+    ///     let cf_dist_utils::RiskMetric{value_at_risk, ..} =  cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
     ///         quantile,
     ///         x_min,
     ///         x_max,
     ///         max_iterations,
     ///         tolerance,
     ///         final_cf,
-    ///     );  
-    ///     var
+    ///     ).unwrap();  
+    ///     value_at_risk
     /// };
     /// let rc = ec_attributes.experiment_risk_contribution(
     ///     &loan,
@@ -708,7 +708,6 @@ impl EconomicCapitalAttributes {
     /// extern crate num_complex;
     /// use rayon::prelude::*;
     /// use num_complex::Complex;
-    /// extern crate cf_dist_utils;
     /// # fn main(){
     /// let num_u:usize=100;
     /// let num_w:usize=1;
@@ -975,15 +974,15 @@ mod tests {
         assert_eq!(final_cf.len(), 256);
         let max_iterations = 100;
         let tolerance = 0.0001;
-        let (es, var) = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+        let cf_dist_utils::RiskMetric{expected_shortfall, value_at_risk} = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
             0.01,
             x_min,
             x_max,
             max_iterations,
             tolerance,
             &final_cf,
-        );
-        assert!(es > var);
+        ).unwrap();
+        assert!(expected_shortfall > value_at_risk);
     }
     #[test]
     fn test_compare_expected_value() {
@@ -1696,15 +1695,15 @@ mod tests {
         let max_iterations = 100;
         let tolerance = 0.0001;
         let risk_measure_fn = |final_cf: &[Complex<f64>]| {
-            let (_es, var) = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+            let cf_dist_utils::RiskMetric{value_at_risk, ..} = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
                 quantile,
                 x_min,
                 x_max,
                 max_iterations,
                 tolerance,
                 final_cf,
-            );
-            var
+            ).unwrap();
+            value_at_risk
         };
         let rc1 = discrete_cf.experiment_risk_contribution(
             &loan2,
@@ -1731,15 +1730,15 @@ mod tests {
         let liquid_exp = expectation_liquidity(lambda + lambda0, q, new_expectation);
         let liquid_var = variance_liquidity(lambda + lambda0, q, new_expectation, new_variance);
         let cf_d = discrete_cf.get_experiment_full_cf(&cf, &systemic_mgf);
-        let (_es, var) = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+        let cf_dist_utils::RiskMetric{value_at_risk, ..} = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
             quantile,
             x_min,
             x_max,
             max_iterations,
             tolerance,
             &cf_d,
-        );
-        let c = (var - liquid_exp) / liquid_var.sqrt();
+        ).unwrap();
+        let c = (value_at_risk - liquid_exp) / liquid_var.sqrt();
         assert_abs_diff_eq!(lambda, lambda_new, epsilon = 0.0000001);
 
         let rc2 = risk_contribution(
