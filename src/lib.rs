@@ -1205,6 +1205,73 @@ mod tests {
         assert_abs_diff_eq!(variance_approx, variance_liquid, epsilon = 0.1);
     }
     #[test]
+    fn test_compare_expected_value_and_variance_stochastic_lgd_non_homogenous_large_w() {
+        let balance1 = 1.0;
+        let balance2 = 1.5;
+        let pd1 = 0.05;
+        let pd2 = 0.03;
+        let lgd1 = 0.5;
+        let lgd2 = 0.6;
+        let num_loans = 5000.0;
+        let lambda = 1000.0; //loss in the event of a liquidity crisis
+        let q = 0.01 / (num_loans * pd1 * lgd1 * balance1 * 2.0);
+        let x_min = (-num_loans * pd1 * lgd1 * balance1 * 2.0 - lambda) * 5.0;
+        let v = vec![0.4, 0.3, 4.0, 3.0];
+        let systemic_expectation = vec![1.0, 1.0, 1.0, 1.0];
+        let v_mgf = gamma_mgf(&v);
+        let lgd_variance = 0.2;
+        let weight1 = vec![0.2, 0.3, 0.3, 0.2];
+        let weight2 = vec![0.3, 0.2, 0.2, 0.3];
+
+        let x_max = 0.0;
+        let num_u: usize = 1024;
+        let mut discrete_cf = EconomicCapitalAttributes::new(num_u, v.len());
+
+        let liquid_fn = get_liquidity_risk_fn(lambda, q);
+
+        //the exponent is negative because l represents a loss
+        let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
+            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+        };
+        let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
+        let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
+
+        let loan1 = Loan {
+            pd: pd1,
+            lgd: lgd1,
+            balance: balance1,
+            r: 0.0,
+            lgd_variance,
+            weight: weight1,
+            num: num_loans, //homogenous
+        };
+        let loan2 = Loan {
+            pd: pd2,
+            lgd: lgd2,
+            balance: balance2,
+            r: 0.0,
+            lgd_variance,
+            weight: weight2,
+            num: num_loans, //homogenous
+        };
+        discrete_cf.process_loan(&loan1, &u_domain, &log_lpm_cf);
+        discrete_cf.process_loan(&loan2, &u_domain, &log_lpm_cf);
+
+        let expectation = discrete_cf.get_portfolio_expectation(&systemic_expectation);
+        let variance = discrete_cf.get_portfolio_variance(&systemic_expectation, &v);
+
+        let expectation_liquid = expectation_liquidity(lambda, q, expectation);
+        let variance_liquid = variance_liquidity(lambda, q, expectation, variance);
+        let final_cf: Vec<Complex<f64>> = discrete_cf.get_full_cf(&v_mgf);
+        assert_eq!(final_cf.len(), num_u);
+        let expectation_approx =
+            cf_dist_utils::get_expectation_discrete_cf(x_min, x_max, &final_cf);
+        let variance_approx = cf_dist_utils::get_variance_discrete_cf(x_min, x_max, &final_cf);
+
+        assert_abs_diff_eq!(expectation_approx, expectation_liquid, epsilon = 0.00001);
+        assert_abs_diff_eq!(variance_approx, variance_liquid, epsilon = 0.1);
+    }
+    #[test]
     fn test_basic_risk_contribution() {
         let balance = 1.0;
         let pd = 0.05;
