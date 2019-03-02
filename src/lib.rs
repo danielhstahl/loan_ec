@@ -2,24 +2,12 @@
 //! Based on [my paper](https://github.com/phillyfan1138/CreditRiskExtensions/blob/master/StahlMultiVariatePaper.pdf)
 //! on credit economic capital.
 //!
-extern crate num_complex;
-extern crate rayon;
 
-extern crate serde_json;
-#[macro_use]
-extern crate serde_derive;
-use self::num_complex::Complex;
-use self::rayon::prelude::*;
+use serde_derive::{Deserialize};
+use num_complex::Complex;
+use rayon::prelude::*;
 mod vec_to_mat;
-#[cfg(test)]
-#[macro_use]
-extern crate approx;
-#[cfg(test)]
-extern crate cf_dist_utils;
-#[cfg(test)]
-extern crate cf_functions;
-#[cfg(test)]
-extern crate fang_oost;
+
 
 /// Struct representing loan attributes
 #[derive(Debug, Deserialize)]
@@ -892,6 +880,7 @@ fn test_mgf(u_weights: &[Complex<f64>]) -> Complex<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::*;
     #[test]
     fn construct_hold_discrete_cf() {
         let discrete_cf = EconomicCapitalAttributes::new(256, 3);
