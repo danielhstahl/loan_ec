@@ -1,9 +1,9 @@
-| [Linux][lin-link] | [Codecov][cov-link] |
-| :---------------: | :-----------------: |
-| ![lin-badge]      | ![cov-badge]        |
+| [Linux][lin-link] |  [Codecov][cov-link]  |
+| :---------------: | :-------------------: |
+| ![lin-badge]      | ![cov-badge]          |
 
-[lin-badge]: https://travis-ci.com/phillyfan1138/loan_ec.svg "Travis build status"
-[lin-link]:  https://travis-ci.com/phillyfan1138/loan_ec "Travis build status"
+[lin-badge]: https://github.com/phillyfan1138/loan_ec/workflows/Rust/badge.svg
+[lin-link]:  https://github.com/phillyfan1138/loan_ec/actions
 [cov-badge]: https://codecov.io/gh/phillyfan1138/loan_ec/branch/master/graph/badge.svg
 [cov-link]:  https://codecov.io/gh/phillyfan1138/loan_ec
 
