@@ -18,8 +18,8 @@ serde_derive = "1.0"
 
 [dev-dependencies]
 approx = "0.2.0"
-fang_oost = "0.13.7"
-cf_functions = "0.10.0"
+fang_oost = "0.14.0"
+cf_functions = "0.14.0"
 cf_dist_utils = "0.8"
 
 [badges]

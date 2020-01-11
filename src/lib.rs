@@ -3,11 +3,10 @@
 //! on credit economic capital.
 //!
 
-use serde_derive::{Deserialize};
 use num_complex::Complex;
 use rayon::prelude::*;
+use serde_derive::Deserialize;
 mod vec_to_mat;
-
 
 /// Struct representing loan attributes
 #[derive(Debug, Deserialize)]
@@ -963,14 +962,18 @@ mod tests {
         assert_eq!(final_cf.len(), 256);
         let max_iterations = 100;
         let tolerance = 0.0001;
-        let cf_dist_utils::RiskMetric{expected_shortfall, value_at_risk} = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+        let cf_dist_utils::RiskMetric {
+            expected_shortfall,
+            value_at_risk,
+        } = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
             0.01,
             x_min,
             x_max,
             max_iterations,
             tolerance,
             &final_cf,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(expected_shortfall > value_at_risk);
     }
     #[test]
@@ -1095,7 +1098,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1153,7 +1156,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1220,7 +1223,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1285,7 +1288,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1363,7 +1366,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1447,7 +1450,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1528,7 +1531,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1622,7 +1625,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1720,7 +1723,7 @@ mod tests {
 
         //the exponent is negative because l represents a loss
         let lgd_fn = |u: &Complex<f64>, l: f64, lgd_v: f64| {
-            cf_functions::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
+            cf_functions::gamma::gamma_cf(&(-u * l), 1.0 / lgd_v, lgd_v)
         };
         let u_domain: Vec<Complex<f64>> = fang_oost::get_u_domain(num_u, x_min, x_max).collect();
         let log_lpm_cf = get_log_lpm_cf(&lgd_fn, &liquid_fn);
@@ -1751,14 +1754,16 @@ mod tests {
         let max_iterations = 100;
         let tolerance = 0.0001;
         let risk_measure_fn = |final_cf: &[Complex<f64>]| {
-            let cf_dist_utils::RiskMetric{value_at_risk, ..} = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
-                quantile,
-                x_min,
-                x_max,
-                max_iterations,
-                tolerance,
-                final_cf,
-            ).unwrap();
+            let cf_dist_utils::RiskMetric { value_at_risk, .. } =
+                cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+                    quantile,
+                    x_min,
+                    x_max,
+                    max_iterations,
+                    tolerance,
+                    final_cf,
+                )
+                .unwrap();
             value_at_risk
         };
         let rc1 = discrete_cf.experiment_risk_contribution(
@@ -1786,14 +1791,16 @@ mod tests {
         let liquid_exp = expectation_liquidity(lambda + lambda0, q, new_expectation);
         let liquid_var = variance_liquidity(lambda + lambda0, q, new_expectation, new_variance);
         let cf_d = discrete_cf.get_experiment_full_cf(&cf, &systemic_mgf);
-        let cf_dist_utils::RiskMetric{value_at_risk, ..} = cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
-            quantile,
-            x_min,
-            x_max,
-            max_iterations,
-            tolerance,
-            &cf_d,
-        ).unwrap();
+        let cf_dist_utils::RiskMetric { value_at_risk, .. } =
+            cf_dist_utils::get_expected_shortfall_and_value_at_risk_discrete_cf(
+                quantile,
+                x_min,
+                x_max,
+                max_iterations,
+                tolerance,
+                &cf_d,
+            )
+            .unwrap();
         let c = (value_at_risk - liquid_exp) / liquid_var.sqrt();
         assert_abs_diff_eq!(lambda, lambda_new, epsilon = 0.0000001);
 
