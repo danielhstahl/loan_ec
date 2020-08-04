@@ -1,5 +1,5 @@
 //! Economic capital for a loan portfolio.  
-//! Based on [my paper](https://github.com/phillyfan1138/CreditRiskExtensions/blob/master/StahlMultiVariatePaper.pdf)
+//! Based on [my paper](https://github.com/phillyfan1138/CreditRiskExtensions/releases/download/0.1.0/main.pdf)
 //! on credit economic capital.
 //!
 
