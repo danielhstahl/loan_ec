@@ -2,10 +2,10 @@
 | :---------------: | :-------------------: |
 | ![lin-badge]      | ![cov-badge]          |
 
-[lin-badge]: https://github.com/phillyfan1138/loan_ec/workflows/Rust/badge.svg
-[lin-link]:  https://github.com/phillyfan1138/loan_ec/actions
-[cov-badge]: https://codecov.io/gh/phillyfan1138/loan_ec/branch/master/graph/badge.svg
-[cov-link]:  https://codecov.io/gh/phillyfan1138/loan_ec
+[lin-badge]: https://github.com/danielhstahl/loan_ec/workflows/Rust/badge.svg
+[lin-link]:  https://github.com/danielhstahl/loan_ec/actions
+[cov-badge]: https://codecov.io/gh/danielhstahl/loan_ec/branch/master/graph/badge.svg
+[cov-link]:  https://codecov.io/gh/danielhstahl/loan_ec
 
 ## Utilities for economic capital assignments for a loan portfolio
 
@@ -18,7 +18,7 @@ Add the following to your Cargo.toml:
 `loan_ec = "0.1.4"`
 
 ## Use
-A full example is in the [credit_faas_demo](https://github.com/phillyfan1138/credit_faas_demo).
+A full example is in the [credit_faas_demo](https://github.com/danielhstahl/credit_faas_demo).
 
 Create instances of the Loan struct:
 
@@ -78,7 +78,7 @@ let v_mgf=|u_weights:&[Complex<f64>]|->Complex<f64>{
 let final_cf:Vec<Complex<f64>>=ec.get_full_cf(&v_mgf);
 ```
 
-Using the characteristic function, obtain any number of metrics including expected shortfall and value at risk (from my [cf_dist_utils](https://github.com/phillyfan1138/cf_dist_utils_rust) repository).
+Using the characteristic function, obtain any number of metrics including expected shortfall and value at risk (from my [cf_dist_utils](https://github.com/danielhstahl/cf_dist_utils_rust) repository).
 
 ```rust
 let quantile=0.01;
